@@ -1,0 +1,2 @@
+-- Mist Config Assurance — initial schema placeholder
+-- Full schema will be added in Task 2
