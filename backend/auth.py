@@ -28,8 +28,10 @@ async def get_org_id(authorization: str = Header(...)) -> str:
             algorithms=["RS256"],
             options={"verify_aud": False},
         )
-    except Exception as exc:
-        raise HTTPException(401, f"Invalid token: {exc}")
+    except jwt.PyJWTError as exc:
+        raise HTTPException(401, "Invalid token")
+    except Exception:
+        raise
     org_id = payload.get("org_id")
     if not org_id:
         raise HTTPException(403, "No active Clerk organization. Select one in the UI.")
