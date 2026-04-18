@@ -47,7 +47,7 @@ export function StandardForm({ initial, onSave, onCancel }: Props) {
     }
     setSaving(true)
     try {
-      await onSave({ ...form, check_value, remediation_value, filter: null } as Omit<Standard, 'id' | 'org_id' | 'created_at'>)
+      await onSave({ ...form, check_value, remediation_value, filter: undefined } as Omit<Standard, 'id' | 'org_id' | 'created_at'>)
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Save failed')
     } finally {

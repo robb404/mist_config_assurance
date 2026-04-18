@@ -1,4 +1,4 @@
-type Status = 'pass' | 'fail' | 'skip' | 'open' | 'resolved' | 'suppressed' | 'pending' | 'success' | 'failed'
+type Status = 'pass' | 'fail' | 'skip' | 'open' | 'resolved' | 'suppressed' | 'pending' | 'approved' | 'rejected' | 'success' | 'failed'
 
 const map: Record<Status, string> = {
   pass:        'bg-healthy/10 text-healthy',
@@ -8,6 +8,8 @@ const map: Record<Status, string> = {
   resolved:    'bg-healthy/10 text-healthy',
   suppressed:  'bg-surface-base text-on-surface/50',
   pending:     'bg-primary/10 text-primary',
+  approved:    'bg-healthy/10 text-healthy',
+  rejected:    'bg-error/10 text-error',
   success:     'bg-healthy/10 text-healthy',
   failed:      'bg-error/10 text-error',
 }
