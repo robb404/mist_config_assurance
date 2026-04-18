@@ -29,6 +29,9 @@
   --font-display: 'Manrope', sans-serif;
   --font-sans: 'Inter', sans-serif;
 
+  /* Gradients */
+  --background-image-signature-gradient: linear-gradient(135deg, #041627, #1A2B3C);
+
   /* Shadows */
   --shadow-ambient: 0 20px 40px rgba(4,22,39,0.06);
 }
