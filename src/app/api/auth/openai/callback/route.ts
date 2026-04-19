@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const error = searchParams.get('error')
 
   if (error) {
-    return NextResponse.redirect(new URL(`/settings?ai_error=${error}`, req.url))
+    return NextResponse.redirect(new URL(`/settings?ai_error=${encodeURIComponent(error)}`, req.url))
   }
 
   const storedState = req.cookies.get('openai_oauth_state')?.value
@@ -43,20 +43,32 @@ export async function GET(req: NextRequest) {
     return NextResponse.redirect(new URL('/settings?ai_error=token_exchange_failed', req.url))
   }
 
-  const { access_token, refresh_token, expires_in } = await tokenRes.json()
+  let access_token: string, refresh_token: string, expires_in: number
+  try {
+    const tokenData = await tokenRes.json()
+    access_token = tokenData.access_token
+    refresh_token = tokenData.refresh_token
+    expires_in = tokenData.expires_in
+  } catch {
+    return NextResponse.redirect(new URL('/settings?ai_error=token_exchange_failed', req.url))
+  }
 
-  const clerkToken = await getToken()
-  const storeRes = await fetch(`${BACKEND}/api/ai-config/oauth`, {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${clerkToken}`,
-      'Content-Type': 'application/json',
-      'X-Org-Id': orgId,
-    },
-    body: JSON.stringify({ access_token, refresh_token, expires_in }),
-  })
+  try {
+    const clerkToken = await getToken()
+    const storeRes = await fetch(`${BACKEND}/api/ai-config/oauth`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${clerkToken}`,
+        'Content-Type': 'application/json',
+        'X-Org-Id': orgId,
+      },
+      body: JSON.stringify({ access_token, refresh_token, expires_in }),
+    })
 
-  if (!storeRes.ok) {
+    if (!storeRes.ok) {
+      return NextResponse.redirect(new URL('/settings?ai_error=store_failed', req.url))
+    }
+  } catch {
     return NextResponse.redirect(new URL('/settings?ai_error=store_failed', req.url))
   }
 
