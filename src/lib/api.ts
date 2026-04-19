@@ -4,16 +4,17 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: res.statusText }))
-    throw new Error(err.detail ?? 'Request failed')
+    const body = await res.json().catch(() => null)
+    throw new Error(body?.detail ?? res.statusText ?? 'Request failed')
   }
+  if (res.status === 204 || res.headers.get('content-length') === '0') return null
   return res.json()
 }
 
 export const api = {
   getOrg: () => request<import('./types').OrgConfig>('api/org'),
-  connect: (mist_token: string, cloud_endpoint: string) =>
-    request('api/org/connect', { method: 'POST', body: JSON.stringify({ mist_token, cloud_endpoint }) }),
+  connect: (mist_token: string, cloud_endpoint: string, mist_org_id?: string) =>
+    request('api/org/connect', { method: 'POST', body: JSON.stringify({ mist_token, cloud_endpoint, mist_org_id: mist_org_id || undefined }) }),
   updateSettings: (settings: { drift_interval_mins: number; auto_remediate: boolean }) =>
     request('api/org/settings', { method: 'PATCH', body: JSON.stringify(settings) }),
 
@@ -46,4 +47,20 @@ export const api = {
     request(`api/remediation/${id}/approve`, { method: 'POST' }),
   rejectRemediation: (id: string) =>
     request(`api/remediation/${id}/reject`, { method: 'POST' }),
+  retryRemediation: (id: string) =>
+    request(`api/remediation/${id}/retry`, { method: 'POST' }),
+
+  getAIConfig: () => request<import('./types').AIConfig>('api/ai-config'),
+  saveAIConfig: (body: {
+    provider: string
+    openai_auth_method?: string | null
+    api_key?: string | null
+    model: string
+    base_url?: string | null
+  }) => request('api/ai-config', { method: 'PUT', body: JSON.stringify(body) }),
+  parseFilter: (text: string) =>
+    request<{ filter: Array<{field: string; condition: string; value?: unknown}> | null }>(
+      'api/ai/parse-filter',
+      { method: 'POST', body: JSON.stringify({ text }) }
+    ),
 }
