@@ -23,6 +23,13 @@ def test_parse_raw_invalid_raises():
         _parse_raw("not json at all")
 
 
+def test_parse_raw_non_array_raises():
+    with pytest.raises(ValueError):
+        _parse_raw('{"key": "value"}')
+    with pytest.raises(ValueError):
+        _parse_raw("42")
+
+
 def test_parse_filter_ollama():
     config = {
         "provider": "ollama",
@@ -70,5 +77,5 @@ def test_parse_filter_ollama_null_response():
 
 
 def test_parse_filter_raises_when_no_config():
-    with pytest.raises(Exception):
+    with pytest.raises((TypeError, KeyError, AttributeError)):
         asyncio.run(parse_filter("PSK only", None, "org_1"))

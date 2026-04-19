@@ -45,7 +45,10 @@ def _parse_raw(raw: str) -> list | None:
 async def _get_openai_token(config: dict, org_id: str) -> str:
     """Return a valid OpenAI bearer token, refreshing via OAuth if needed."""
     if config.get("openai_auth_method") == "oauth":
-        expiry = datetime.fromisoformat(config["oauth_token_expiry"])
+        expiry_str = config.get("oauth_token_expiry")
+        if not expiry_str:
+            raise ValueError("OAuth token expiry missing from ai_config. Reconnect OpenAI in Settings.")
+        expiry = datetime.fromisoformat(expiry_str)
         if datetime.now(timezone.utc) >= expiry - timedelta(minutes=5):
             async with httpx.AsyncClient() as client:
                 r = await client.post(
@@ -113,8 +116,8 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
                     {"role": "user", "content": text},
                 ],
             })
-        r.raise_for_status()
-        raw = r.json()["message"]["content"]
+            r.raise_for_status()
+            raw = r.json()["message"]["content"]
 
     else:
         raise ValueError(f"Unknown provider: {provider}")
