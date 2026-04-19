@@ -1,17 +1,22 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
-from fastapi import Depends, FastAPI, HTTPException
+import httpx
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import mist_client as mist
 from . import scheduler as sched
+from .ai_provider import parse_filter as _ai_parse_filter
 from .auth import get_org_id
 from .crypto import decrypt, encrypt
 from .db import get_client
 from .engine import evaluate_site
-from .models import ConnectRequest, OrgSettingsRequest, RunRequest, StandardCreate, StandardUpdate
+from .models import (
+    AIConfigSave, ConnectRequest, OAuthTokensRequest, OrgSettingsRequest,
+    ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
+)
 from .remediation import apply_remediation
 
 log = logging.getLogger("mist_ca")
@@ -43,9 +48,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 async def connect(req: ConnectRequest, org_id: str = Depends(get_org_id)):
     base_url = mist.build_base_url(req.cloud_endpoint)
     try:
-        info = await mist.get_org_info(req.mist_token, base_url)
+        info = await mist.get_org_info(req.mist_token, base_url, req.mist_org_id)
     except ValueError as exc:
         raise HTTPException(401, str(exc))
+    except httpx.TimeoutException:
+        raise HTTPException(504, f"Timed out connecting to {req.cloud_endpoint}. Check the endpoint and network.")
     except Exception as exc:
         raise HTTPException(502, f"Could not reach Mist: {exc}")
 
@@ -55,6 +62,7 @@ async def connect(req: ConnectRequest, org_id: str = Depends(get_org_id)):
         "mist_token": encrypt(req.mist_token),
         "cloud_endpoint": req.cloud_endpoint,
         "org_name": info["org_name"],
+        "mist_org_id": info["org_id"],
     }).execute()
     return {"org_name": info["org_name"], "mist_org_id": info["org_id"]}
 
@@ -79,6 +87,79 @@ async def update_settings(req: OrgSettingsRequest, org_id: str = Depends(get_org
     }).eq("org_id", org_id).execute()
     sched.upsert_org_job(org_id, req.drift_interval_mins, run_drift_for_org)
     return {"ok": True}
+
+
+# ---------------------------------------------------------------------------
+# AI Config
+# ---------------------------------------------------------------------------
+
+@app.get("/api/ai-config")
+async def get_ai_config(org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("ai_config").select("*").eq("org_id", org_id).maybe_single().execute()
+    if not row or not row.data:
+        return {"configured": False}
+    data = row.data
+    return {
+        "configured": True,
+        "provider": data["provider"],
+        "openai_auth_method": data.get("openai_auth_method"),
+        "model": data["model"],
+        "base_url": data.get("base_url"),
+        "has_key": bool(data.get("api_key")),
+        "oauth_connected": bool(data.get("oauth_access_token")),
+        "oauth_token_expiry": data.get("oauth_token_expiry"),
+    }
+
+
+@app.put("/api/ai-config")
+async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
+    db = get_client()
+    payload: dict = {
+        "org_id": org_id,
+        "provider": req.provider,
+        "openai_auth_method": req.openai_auth_method,
+        "model": req.model,
+        "base_url": req.base_url,
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    if req.api_key:
+        payload["api_key"] = encrypt(req.api_key)
+    db.table("ai_config").upsert(payload).execute()
+    return {"ok": True}
+
+
+@app.post("/api/ai-config/oauth")
+async def store_oauth_tokens(req: OAuthTokensRequest, org_id: str = Depends(get_org_id)):
+    expiry = datetime.now(timezone.utc) + timedelta(seconds=req.expires_in)
+    db = get_client()
+    db.table("ai_config").upsert({
+        "org_id": org_id,
+        "provider": "openai",
+        "openai_auth_method": "oauth",
+        "oauth_access_token": encrypt(req.access_token),
+        "oauth_refresh_token": encrypt(req.refresh_token),
+        "oauth_token_expiry": expiry.isoformat(),
+        "model": "gpt-4o-mini",
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }).execute()
+    return {"ok": True}
+
+
+@app.post("/api/ai/parse-filter")
+async def parse_filter_endpoint(req: ParseFilterRequest, org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("ai_config").select("*").eq("org_id", org_id).maybe_single().execute()
+    if not row or not row.data:
+        raise HTTPException(400, "No AI provider configured. Visit Settings → AI Provider to set one up.")
+    try:
+        result = await _ai_parse_filter(req.text, row.data, org_id)
+        return {"filter": result}
+    except ValueError as exc:
+        raise HTTPException(422, str(exc))
+    except Exception as exc:
+        log.error("AI parse-filter error: %s", exc)
+        raise HTTPException(502, f"AI provider error: {exc}")
 
 
 # ---------------------------------------------------------------------------
@@ -197,7 +278,7 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
     for f in findings:
         db.table("finding").insert({**f, "run_id": run_id}).execute()
 
-    await _sync_incidents(org_id, site_id, site_name, findings, standards, org)
+    await _sync_incidents(org_id, site_id, site_name, findings, standards, org, org.get("mist_org_id"))
 
     db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
         .eq("id", site_id).eq("org_id", org_id).execute()
@@ -207,13 +288,17 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
 
 @app.get("/api/sites/{site_id}/findings")
 async def get_findings(site_id: str, org_id: str = Depends(get_org_id)):
-    db = get_client()
-    run = db.table("validation_run").select("id").eq("org_id", org_id).eq("site_id", site_id) \
-            .order("run_at", desc=True).limit(1).maybe_single().execute()
-    if not run.data:
+    try:
+        db = get_client()
+        run = db.table("validation_run").select("id").eq("org_id", org_id).eq("site_id", site_id) \
+                .order("run_at", desc=True).limit(1).maybe_single().execute()
+        if run is None or not run.data:
+            return {"findings": []}
+        findings = db.table("finding").select("*").eq("run_id", run.data["id"]).execute()
+        return {"findings": findings.data or []}
+    except Exception as exc:
+        log.exception("get_findings failed for site=%s: %s", site_id, exc)
         return {"findings": []}
-    findings = db.table("finding").select("*").eq("run_id", run.data["id"]).execute()
-    return {"findings": findings.data or []}
 
 
 # ---------------------------------------------------------------------------
@@ -242,7 +327,7 @@ async def suppress_incident(incident_id: str, org_id: str = Depends(get_org_id))
 async def list_pending(org_id: str = Depends(get_org_id)):
     db = get_client()
     rows = db.table("remediation_action").select("*").eq("org_id", org_id) \
-             .eq("status", "pending").order("attempted_at", desc=True).execute()
+             .in_("status", ["pending", "failed"]).order("attempted_at", desc=True).execute()
     return {"actions": rows.data or []}
 
 
@@ -254,7 +339,22 @@ async def approve_action(action_id: str, org_id: str = Depends(get_org_id)):
     if not row.data:
         raise HTTPException(404, "Action not found")
     action = row.data
-    await _execute_remediation_action(action, org_id)
+    org = _get_org_or_404(org_id)
+    await _execute_remediation_action(action, org_id, org.get("mist_org_id"))
+    return {"ok": True}
+
+
+@app.post("/api/remediation/{action_id}/retry")
+async def retry_action(action_id: str, org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("remediation_action").select("*").eq("id", action_id).eq("org_id", org_id) \
+            .maybe_single().execute()
+    if row is None or not row.data:
+        raise HTTPException(404, "Action not found")
+    db.table("remediation_action").update({"status": "pending", "error_detail": None}) \
+        .eq("id", action_id).execute()
+    org = _get_org_or_404(org_id)
+    await _execute_remediation_action(row.data, org_id, org.get("mist_org_id"))
     return {"ok": True}
 
 
@@ -268,6 +368,16 @@ async def reject_action(action_id: str, org_id: str = Depends(get_org_id)):
 # ---------------------------------------------------------------------------
 # Health
 # ---------------------------------------------------------------------------
+
+@app.get("/api/sites/{site_id}/wlans/raw")
+async def get_raw_wlans(site_id: str, org_id: str = Depends(get_org_id)):
+    """Return raw derived WLAN objects from Mist — for inspecting field names when writing standards."""
+    org = _get_org_or_404(org_id)
+    token = decrypt(org["mist_token"])
+    base_url = mist.build_base_url(org["cloud_endpoint"])
+    wlans = await mist.get_site_wlans(token, base_url, site_id)
+    return {"wlans": wlans}
+
 
 @app.get("/health")
 async def health():
@@ -293,7 +403,8 @@ async def _get_mist_org_id(token: str, base_url: str) -> str:
 
 async def _sync_incidents(
     org_id: str, site_id: str, site_name: str,
-    findings: list[dict], standards: list[dict], org: dict
+    findings: list[dict], standards: list[dict], org: dict,
+    mist_org_id: str | None = None,
 ):
     db = get_client()
     std_map = {s["id"]: s for s in standards}
@@ -352,35 +463,84 @@ async def _sync_incidents(
         }).execute().data[0]
 
         if auto:
-            await _execute_remediation_action(action, org_id)
+            await _execute_remediation_action(action, org_id, mist_org_id)
 
 
-async def _execute_remediation_action(action: dict, org_id: str):
+async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: str | None = None):
     db = get_client()
     org = _get_org_or_404(org_id)
     token = decrypt(org["mist_token"])
     base_url = mist.build_base_url(org["cloud_endpoint"])
+    effective_mist_org_id = mist_org_id or org.get("mist_org_id")
 
     std = db.table("standard").select("*").eq("id", action["standard_id"]).maybe_single().execute()
     if not std.data:
         return
 
     result = await apply_remediation(
-        action["site_id"], action.get("wlan_id"), std.data, token, base_url
+        action["site_id"], action.get("wlan_id"), std.data, token, base_url, effective_mist_org_id
     )
 
+    now = datetime.now(timezone.utc).isoformat()
     update = {
-        "attempted_at": datetime.now(timezone.utc).isoformat(),
+        "attempted_at": now,
         "status": "success" if result["success"] else "failed",
         "error_detail": result.get("error"),
     }
     db.table("remediation_action").update(update).eq("id", action["id"]).execute()
 
     if result["success"]:
-        db.table("incident").update({
-            "status": "resolved",
-            "resolved_at": datetime.now(timezone.utc).isoformat(),
-        }).eq("id", action["incident_id"]).execute()
+        if result.get("org_level"):
+            db.table("incident").update({"status": "resolved", "resolved_at": now}) \
+                .eq("org_id", org_id) \
+                .eq("standard_id", str(action["standard_id"])) \
+                .eq("wlan_id", action.get("wlan_id")) \
+                .eq("status", "open").execute()
+            log.info("org-level fix: resolved all open incidents for standard=%s wlan=%s",
+                     action["standard_id"], action.get("wlan_id"))
+            # Re-run all monitored sites so findings reflect the fix
+            import asyncio
+            asyncio.create_task(_rerun_all_sites(org_id, org))
+        else:
+            db.table("incident").update({"status": "resolved", "resolved_at": now}) \
+                .eq("id", action["incident_id"]).execute()
+            asyncio.create_task(_rerun_site(org_id, action["site_id"], org))
+
+
+async def _rerun_site(org_id: str, site_id: str, org: dict):
+    """Re-validate a single site after remediation to refresh findings."""
+    try:
+        token = decrypt(org["mist_token"])
+        base_url = mist.build_base_url(org["cloud_endpoint"])
+        wlans = await mist.get_site_wlans(token, base_url, site_id)
+        site_setting = await mist.get_site_setting(token, base_url, site_id)
+        db = get_client()
+        stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
+        site_row = db.table("site").select("name").eq("id", site_id).eq("org_id", org_id).maybe_single().execute()
+        site_name = (site_row.data["name"] if (site_row and site_row.data) else site_id)
+        findings = evaluate_site(site_id, site_name, wlans, site_setting, stds.data or [])
+        passed  = sum(1 for f in findings if f["status"] == "pass")
+        failed  = sum(1 for f in findings if f["status"] == "fail")
+        skipped = sum(1 for f in findings if f["status"] == "skip")
+        run = db.table("validation_run").insert({
+            "org_id": org_id, "site_id": site_id, "site_name": site_name,
+            "triggered_by": "scheduled", "passed": passed, "failed": failed, "skipped": skipped,
+        }).execute().data[0]
+        for f in findings:
+            db.table("finding").insert({**f, "run_id": run["id"]}).execute()
+        await _sync_incidents(org_id, site_id, site_name, findings, stds.data or [], org, org.get("mist_org_id"))
+        db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
+            .eq("id", site_id).eq("org_id", org_id).execute()
+        log.info("post-remediation rerun complete site=%s passed=%s failed=%s", site_id, passed, failed)
+    except Exception as exc:
+        log.exception("post-remediation rerun failed for site=%s: %s", site_id, exc)
+
+
+async def _rerun_all_sites(org_id: str, org: dict):
+    db = get_client()
+    sites = db.table("site").select("*").eq("org_id", org_id).eq("monitored", True).execute()
+    for site in (sites.data or []):
+        await _rerun_site(org_id, site["id"], org)
 
 
 async def run_drift_for_org(org_id: str):
@@ -412,7 +572,7 @@ async def run_drift_for_org(org_id: str):
             }).execute().data[0]
             for f in findings:
                 db.table("finding").insert({**f, "run_id": run["id"]}).execute()
-            await _sync_incidents(org_id, site["id"], site["name"], findings, stds.data or [], org)
+            await _sync_incidents(org_id, site["id"], site["name"], findings, stds.data or [], org, org.get("mist_org_id"))
             db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
                 .eq("id", site["id"]).eq("org_id", org_id).execute()
         except Exception as exc:
