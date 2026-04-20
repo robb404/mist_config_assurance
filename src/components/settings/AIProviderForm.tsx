@@ -200,9 +200,6 @@ export function AIProviderForm() {
         {!(provider === 'openai' && openaiMethod === 'oauth') && (
           <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
         )}
-        {provider === 'openai' && openaiMethod === 'oauth' && config?.oauth_connected && (
-          <Button type="submit" disabled={saving}>{saving ? 'Saving…' : 'Update Model'}</Button>
-        )}
       </form>
 
       {msg && <p className="text-sm text-on-surface/70 mt-3">{msg}</p>}
