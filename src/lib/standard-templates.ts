@@ -1,189 +1,282 @@
 import type { Standard } from './types'
 
-type Template = Omit<Standard, 'id' | 'org_id' | 'created_at'>
+type BaseStd = Omit<Standard, 'id' | 'org_id' | 'created_at'>
+
+export interface TemplateCard {
+  key: string
+  title: string
+  description: string
+  /** Present on dropdown and dynamic cards; absent on simple cards. */
+  options?: { label: string; value: string }[]
+  /** If 'rftemplates', caller must populate options from GET /api/rftemplates. */
+  dynamicOptions?: 'rftemplates'
+  /** Returns the standards to create. Simple cards ignore selectedValue. */
+  getStandards: (selectedValue?: string) => BaseStd[]
+  /** Returns true if this template is already represented in the loaded standards list. */
+  isAdded: (standards: Standard[]) => boolean
+}
 
 export interface TemplateGroup {
   label: string
-  templates: (Template & { key: string; hint: string })[]
+  templates: TemplateCard[]
 }
 
-export const TEMPLATE_GROUPS: TemplateGroup[] = [
+export interface TabConfig {
+  id: 'wlan' | 'site'
+  label: string
+  groups: TemplateGroup[]
+}
+
+const W: Pick<BaseStd, 'scope' | 'filter' | 'enabled' | 'auto_remediate'> = {
+  scope: 'wlan', filter: undefined, enabled: true, auto_remediate: null,
+}
+
+const S: Pick<BaseStd, 'scope' | 'filter' | 'enabled' | 'auto_remediate'> = {
+  scope: 'site', filter: undefined, enabled: true, auto_remediate: null,
+}
+
+export const TABS: TabConfig[] = [
   {
-    label: 'Performance',
-    templates: [
+    id: 'wlan',
+    label: 'WLAN',
+    groups: [
       {
-        key: 'no_legacy_rates_24',
-        name: 'No Legacy 2.4 GHz Rates',
-        hint: 'Sets 2.4 GHz rate template to no-legacy — removes 802.11b (1/2/5.5/11 Mbps), reduces airtime overhead',
-        description: 'Remove legacy 802.11b data rates on 2.4 GHz to improve airtime efficiency.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'rateset.24.template', check_condition: 'in', check_value: ['no-legacy', 'high-density'],
-        remediation_field: 'rateset.24.template', remediation_value: 'no-legacy', auto_remediate: null,
-      },
-      {
-        key: 'no_legacy_rates_5',
-        name: 'No Legacy 5 GHz Rates',
-        hint: 'Sets 5 GHz rate template to no-legacy — removes oldest MCS rates, improves spectral efficiency',
-        description: 'Remove legacy data rates on 5 GHz to improve airtime efficiency.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'rateset.5.template', check_condition: 'in', check_value: ['no-legacy', 'high-density'],
-        remediation_field: 'rateset.5.template', remediation_value: 'no-legacy', auto_remediate: null,
-      },
-      {
-        key: 'band_steer',
-        name: 'Band Steering Enabled',
-        hint: 'Steers dual-band clients to 5 GHz to reduce 2.4 GHz congestion',
-        description: 'Enable band steering to prefer 5 GHz for capable clients.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'band_steer', check_condition: 'truthy', check_value: null,
-        remediation_field: 'band_steer', remediation_value: true, auto_remediate: null,
-      },
-      {
-        key: 'roam_11r',
-        name: 'Fast Roaming (802.11r)',
-        hint: 'Reduces roam latency to <50 ms — applies only to WPA2/WPA3 (PSK + Enterprise). Skipped on Open/OWE.',
-        description: 'Enable 802.11r Fast BSS Transition for seamless roaming. Skipped on open/OWE WLANs.',
-        scope: 'wlan',
-        filter: [
-          { field: 'auth.type', condition: 'eq', value: 'psk' },
-          { field: 'auth.type', condition: 'eq', value: 'eap' },
+        label: 'Performance',
+        templates: [
+          {
+            key: 'fast_roaming',
+            title: 'Fast Roaming (802.11r)',
+            description: 'Reduces roam latency <50ms — PSK/EAP WLANs only.',
+            getStandards: () => [{
+              ...W,
+              name: 'Fast Roaming (802.11r)',
+              description: 'Enable 802.11r Fast BSS Transition for seamless roaming. Skipped on open/OWE WLANs.',
+              filter: [
+                { field: 'auth.type', condition: 'eq', value: 'psk' },
+                { field: 'auth.type', condition: 'eq', value: 'eap' },
+              ],
+              check_field: 'roam_mode', check_condition: 'eq', check_value: '11r',
+              remediation_field: 'roam_mode', remediation_value: '11r',
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'roam_mode'),
+          },
+          {
+            key: 'data_rates',
+            title: 'Data Rates',
+            description: 'Enforce a rate template on 2.4, 5, and 6 GHz (creates 3 standards).',
+            options: [
+              { label: 'No Legacy', value: 'no-legacy' },
+              { label: 'High Density', value: 'high-density' },
+              { label: 'Compatible', value: 'compatible' },
+            ],
+            getStandards: (val = 'no-legacy') =>
+              (['24', '5', '6'] as const).map(band => ({
+                ...W,
+                name: `Data Rates — ${band === '24' ? '2.4' : band} GHz (${val})`,
+                description: `Set ${band === '24' ? '2.4' : band} GHz rate template to ${val}.`,
+                check_field: `rateset.${band}.template`,
+                check_condition: 'eq',
+                check_value: val,
+                remediation_field: `rateset.${band}.template`,
+                remediation_value: val,
+              })),
+            isAdded: (stds) =>
+              ['24', '5', '6'].every(b => stds.some(s => s.check_field === `rateset.${b}.template`)),
+          },
+          {
+            key: 'wifi7',
+            title: 'Wi-Fi 7 (802.11be)',
+            description: 'Ensure Wi-Fi 7 is enabled or disabled across all WLANs.',
+            options: [
+              { label: 'Enabled', value: 'enabled' },
+              { label: 'Disabled', value: 'disabled' },
+            ],
+            getStandards: (val = 'enabled') => {
+              const disable = val !== 'enabled'
+              return [{
+                ...W,
+                name: `Wi-Fi 7 (802.11be) ${disable ? 'Disabled' : 'Enabled'}`,
+                description: `Ensure 802.11be (Wi-Fi 7) is ${disable ? 'disabled' : 'enabled'} on all WLANs.`,
+                check_field: 'disable_11be',
+                check_condition: 'eq',
+                check_value: disable,
+                remediation_field: 'disable_11be',
+                remediation_value: disable,
+              }]
+            },
+            isAdded: (stds) => stds.some(s => s.check_field === 'disable_11be'),
+          },
         ],
-        enabled: true,
-        check_field: 'roam_mode', check_condition: 'eq', check_value: '11r',
-        remediation_field: 'roam_mode', remediation_value: '11r', auto_remediate: null,
-      },
-    ],
-  },
-  {
-    label: 'Network Efficiency',
-    templates: [
-      {
-        key: 'arp_filter',
-        name: 'ARP Filtering',
-        hint: 'Proxies ARP replies at the AP — cuts broadcast traffic and prevents ARP spoofing',
-        description: 'Enable ARP filtering to suppress broadcast ARP storms and proxy replies.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'arp_filter', check_condition: 'truthy', check_value: null,
-        remediation_field: 'arp_filter', remediation_value: true, auto_remediate: null,
       },
       {
-        key: 'limit_bcast',
-        name: 'Broadcast/Multicast Filtering',
-        hint: 'Drops non-essential broadcast and multicast frames to protect airtime',
-        description: 'Limit broadcast and multicast traffic to reduce airtime waste.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'limit_bcast', check_condition: 'truthy', check_value: null,
-        remediation_field: 'limit_bcast', remediation_value: true, auto_remediate: null,
-      },
-      {
-        key: 'no_wireless_bridging',
-        name: 'Wireless Bridging Disabled',
-        hint: 'Prevents client-to-client traffic on the same SSID — required in most enterprise policies',
-        description: 'Disable wireless bridging to isolate clients from each other.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'enable_wireless_bridging', check_condition: 'falsy', check_value: null,
-        remediation_field: 'enable_wireless_bridging', remediation_value: false, auto_remediate: null,
-      },
-    ],
-  },
-  {
-    label: 'Client Security',
-    templates: [
-      {
-        key: 'wpa3',
-        name: 'WPA3 Required',
-        hint: 'Mandates WPA3-SAE pairwise cipher — eliminates PMKID/KRACK attacks. Applies only to PSK WLANs.',
-        description: 'Require WPA3 pairwise encryption on PSK WLANs.',
-        scope: 'wlan',
-        filter: [{ field: 'auth.type', condition: 'eq', value: 'psk' }],
-        enabled: true,
-        check_field: 'auth.pairwise', check_condition: 'contains_item', check_value: 'wpa3',
-        remediation_field: 'auth.pairwise', remediation_value: ['wpa3'], auto_remediate: null,
-      },
-      {
-        key: 'pmf',
-        name: 'PMF / 802.11w Required',
-        hint: 'Management Frame Protection — prevents deauth/disassoc attacks. Applies to encrypted WLANs.',
-        description: 'Enable Protected Management Frames (802.11w) on encrypted WLANs.',
-        scope: 'wlan',
-        filter: [
-          { field: 'auth.type', condition: 'eq', value: 'psk' },
-          { field: 'auth.type', condition: 'eq', value: 'eap' },
-          { field: 'auth.type', condition: 'eq', value: 'eap192' },
+        label: 'Radio Band',
+        templates: [
+          {
+            key: 'band_24',
+            title: 'Radio Band — 2.4 GHz',
+            description: 'Require WLANs to broadcast on 2.4 GHz.',
+            getStandards: () => [{
+              ...W,
+              name: 'Radio Band — 2.4 GHz',
+              description: 'Ensure WLANs are configured to broadcast on 2.4 GHz.',
+              check_field: 'bands', check_condition: 'contains_item', check_value: '24',
+              remediation_field: 'bands', remediation_value: ['24'],
+            }],
+            isAdded: (stds) =>
+              stds.some(s => s.check_field === 'bands' && s.check_value === '24'),
+          },
+          {
+            key: 'band_5',
+            title: 'Radio Band — 5 GHz',
+            description: 'Require WLANs to broadcast on 5 GHz.',
+            getStandards: () => [{
+              ...W,
+              name: 'Radio Band — 5 GHz',
+              description: 'Ensure WLANs are configured to broadcast on 5 GHz.',
+              check_field: 'bands', check_condition: 'contains_item', check_value: '5',
+              remediation_field: 'bands', remediation_value: ['5'],
+            }],
+            isAdded: (stds) =>
+              stds.some(s => s.check_field === 'bands' && s.check_value === '5'),
+          },
+          {
+            key: 'band_6',
+            title: 'Radio Band — 6 GHz',
+            description: 'Require WLANs to broadcast on 6 GHz.',
+            getStandards: () => [{
+              ...W,
+              name: 'Radio Band — 6 GHz',
+              description: 'Ensure WLANs are configured to broadcast on 6 GHz.',
+              check_field: 'bands', check_condition: 'contains_item', check_value: '6',
+              remediation_field: 'bands', remediation_value: ['6'],
+            }],
+            isAdded: (stds) =>
+              stds.some(s => s.check_field === 'bands' && s.check_value === '6'),
+          },
         ],
-        enabled: true,
-        check_field: 'auth.enable_beacon_protection', check_condition: 'truthy', check_value: null,
-        remediation_field: 'auth.enable_beacon_protection', remediation_value: true, auto_remediate: null,
       },
       {
-        key: 'owe',
-        name: 'OWE Required on Open WLANs',
-        hint: 'Enhanced Open (OWE) encrypts open SSID traffic without a password — prevents passive sniffing',
-        description: 'Require Opportunistic Wireless Encryption on open WLANs.',
-        scope: 'wlan',
-        filter: [{ field: 'auth.type', condition: 'eq', value: 'open' }],
-        enabled: true,
-        check_field: 'auth.owe', check_condition: 'eq', check_value: 'required',
-        remediation_field: 'auth.owe', remediation_value: 'required', auto_remediate: null,
-      },
-      {
-        key: 'client_isolation',
-        name: 'Client Isolation',
-        hint: 'Blocks client-to-client traffic — essential for guest and IoT WLANs',
-        description: 'Enable client isolation to prevent lateral movement between wireless clients.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'isolation', check_condition: 'truthy', check_value: null,
-        remediation_field: 'isolation', remediation_value: true, auto_remediate: null,
-      },
-      {
-        key: 'hide_ssid',
-        name: 'SSID Not Hidden',
-        hint: 'Ensures SSIDs are broadcast — hidden SSIDs cause client probe storms and add no real security',
-        description: 'Ensure SSID is visible (hidden SSIDs increase probe traffic without security benefit).',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'hide_ssid', check_condition: 'falsy', check_value: null,
-        remediation_field: 'hide_ssid', remediation_value: false, auto_remediate: null,
-      },
-      {
-        key: 'no_static_ip',
-        name: 'No Static IPs Allowed',
-        hint: 'Restricts clients to DHCP-assigned addresses — simplifies tracking and prevents IP conflicts',
-        description: 'Block clients using static IP addresses; require DHCP.',
-        scope: 'wlan', filter: null, enabled: true,
-        check_field: 'no_static_ip', check_condition: 'truthy', check_value: null,
-        remediation_field: 'no_static_ip', remediation_value: true, auto_remediate: null,
+        label: 'Network Efficiency',
+        templates: [
+          {
+            key: 'arp_filter',
+            title: 'ARP Filtering',
+            description: 'Proxy ARP replies — cuts broadcast traffic.',
+            getStandards: () => [{
+              ...W,
+              name: 'ARP Filtering',
+              description: 'Enable ARP filtering to suppress broadcast ARP storms and proxy replies.',
+              check_field: 'arp_filter', check_condition: 'truthy', check_value: null,
+              remediation_field: 'arp_filter', remediation_value: true,
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'arp_filter'),
+          },
+          {
+            key: 'limit_bcast',
+            title: 'Broadcast/Multicast Filtering',
+            description: 'Drop non-essential broadcast frames to protect airtime.',
+            getStandards: () => [{
+              ...W,
+              name: 'Broadcast/Multicast Filtering',
+              description: 'Limit broadcast and multicast traffic to reduce airtime waste.',
+              check_field: 'limit_bcast', check_condition: 'truthy', check_value: null,
+              remediation_field: 'limit_bcast', remediation_value: true,
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'limit_bcast'),
+          },
+          {
+            key: 'disable_gw_down',
+            title: 'Disable When Gateway Down',
+            description: 'Disables WLAN when AP cannot reach its gateway.',
+            getStandards: () => [{
+              ...W,
+              name: 'Disable When Gateway Down',
+              description: 'Disable WLAN when the AP cannot reach its gateway.',
+              check_field: 'disable_when_gateway_unreachable', check_condition: 'truthy', check_value: null,
+              remediation_field: 'disable_when_gateway_unreachable', remediation_value: true,
+            }],
+            isAdded: (stds) =>
+              stds.some(s => s.check_field === 'disable_when_gateway_unreachable'),
+          },
+        ],
       },
     ],
   },
   {
-    label: 'Site Security',
-    templates: [
+    id: 'site',
+    label: 'Site',
+    groups: [
       {
-        key: 'rogue_detection',
-        name: 'Rogue AP Detection',
-        hint: 'Enables WIDS rogue AP scanning — detects unauthorized APs and evil-twin attacks',
-        description: 'Enable rogue AP detection at the site level.',
-        scope: 'site', filter: null, enabled: true,
-        check_field: 'rogue.enabled', check_condition: 'truthy', check_value: null,
-        remediation_field: 'rogue.enabled', remediation_value: true, auto_remediate: null,
+        label: 'Radio',
+        templates: [
+          {
+            key: 'rftemplate',
+            title: 'RF Template',
+            description: 'Apply an org RF template to all sites.',
+            options: [],
+            dynamicOptions: 'rftemplates',
+            getStandards: (val = '') => {
+              if (!val) return []
+              return [{
+                ...S,
+                name: 'RF Template',
+                description: 'Ensure sites use the selected org RF template.',
+                check_field: 'rftemplate_id', check_condition: 'eq', check_value: val,
+                remediation_field: 'rftemplate_id', remediation_value: val,
+              }]
+            },
+            isAdded: (stds) => stds.some(s => s.check_field === 'rftemplate_id'),
+          },
+        ],
       },
       {
-        key: 'rogue_honeypot',
-        name: 'Honeypot SSID Detection',
-        hint: 'Detects SSIDs that spoof your known networks — catches evil-twin attacks targeting your users',
-        description: 'Enable honeypot SSID detection to identify evil-twin APs mimicking your SSIDs.',
-        scope: 'site', filter: null, enabled: true,
-        check_field: 'rogue.honeypot_enabled', check_condition: 'truthy', check_value: null,
-        remediation_field: 'rogue.honeypot_enabled', remediation_value: true, auto_remediate: null,
+        label: 'Reliability',
+        templates: [
+          {
+            key: 'persist_config',
+            title: 'AP Config Persistence',
+            description: 'AP retains config and serves clients when cloud connection is lost.',
+            getStandards: () => [{
+              ...S,
+              name: 'AP Config Persistence',
+              description: 'Store AP config locally so APs remain functional during cloud outages.',
+              check_field: 'persist_config_on_device', check_condition: 'truthy', check_value: null,
+              remediation_field: 'persist_config_on_device', remediation_value: true,
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'persist_config_on_device'),
+          },
+        ],
       },
       {
-        key: 'arp_spoof_check',
-        name: 'ARP Spoof Detection',
-        hint: 'Site-level ARP spoofing detection — identifies clients sending gratuitous ARPs to hijack traffic',
-        description: 'Enable ARP spoofing detection at the site level.',
-        scope: 'site', filter: null, enabled: true,
-        check_field: 'wifi.enable_arp_spoof_check', check_condition: 'truthy', check_value: null,
-        remediation_field: 'wifi.enable_arp_spoof_check', remediation_value: true, auto_remediate: null,
+        label: 'Security',
+        templates: [
+          {
+            key: 'switch_root_pw',
+            title: 'Switch Mgmt Root Password',
+            description: 'Ensure a root password is set on managed switches. Checks password is set — value not verified.',
+            getStandards: () => [{
+              ...S,
+              name: 'Switch Mgmt Root Password',
+              description: 'Ensure managed switches have a root password configured. Password value cannot be verified.',
+              check_field: 'switch_mgmt.root_password', check_condition: 'truthy', check_value: null,
+              remediation_field: 'switch_mgmt.root_password', remediation_value: null,
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'switch_mgmt.root_password'),
+          },
+          {
+            key: 'wan_root_pw',
+            title: 'WAN Edge Root Password',
+            description: 'Ensure a root password is set on WAN edge devices. Checks password is set — value not verified.',
+            getStandards: () => [{
+              ...S,
+              name: 'WAN Edge Root Password',
+              description: 'Ensure WAN edge devices have a root password configured. Password value cannot be verified.',
+              check_field: 'gateway_mgmt.root_password', check_condition: 'truthy', check_value: null,
+              remediation_field: 'gateway_mgmt.root_password', remediation_value: null,
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'gateway_mgmt.root_password'),
+          },
+        ],
       },
     ],
   },
