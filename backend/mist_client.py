@@ -57,6 +57,22 @@ async def get_site_wlans(token: str, base_url: str, site_id: str) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+async def get_wlan_derived(token: str, base_url: str, site_id: str, wlan_id: str) -> dict | None:
+    """Return the derived WLAN object for a single WLAN. Includes 'for_site' boolean."""
+    async with httpx.AsyncClient(verify=False) as client:
+        resp = await client.get(
+            f"{base_url}sites/{site_id}/wlans/derived",
+            params={"resolve": "false", "wlan_id": wlan_id},
+            headers=_headers(token), timeout=TIMEOUT,
+        )
+        if not resp.is_success:
+            return None
+        data = resp.json()
+    if isinstance(data, list):
+        return data[0] if data else None
+    return data if isinstance(data, dict) else None
+
+
 async def get_site_setting(token: str, base_url: str, site_id: str) -> dict:
     async with httpx.AsyncClient(verify=False) as client:
         resp = await client.get(
@@ -92,3 +108,24 @@ async def patch_site_setting(token: str, base_url: str, site_id: str, payload: d
             json=payload, headers=_headers(token), timeout=TIMEOUT,
         )
         return resp.is_success
+
+
+async def patch_org_setting(token: str, base_url: str, mist_org_id: str, payload: dict) -> bool:
+    async with httpx.AsyncClient(verify=False) as client:
+        resp = await client.put(
+            f"{base_url}orgs/{mist_org_id}/setting",
+            json=payload, headers=_headers(token), timeout=TIMEOUT,
+        )
+        return resp.is_success
+
+
+async def get_rftemplates(token: str, base_url: str, org_id: str) -> list[dict]:
+    async with httpx.AsyncClient(verify=False) as client:
+        resp = await client.get(
+            f"{base_url}orgs/{org_id}/rftemplates",
+            headers=_headers(token), timeout=TIMEOUT,
+        )
+        if not resp.is_success:
+            return []
+        data = resp.json()
+        return data if isinstance(data, list) else []

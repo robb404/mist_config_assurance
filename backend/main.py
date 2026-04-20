@@ -159,6 +159,21 @@ async def get_fields(_: str = Depends(get_org_id)):
         raise HTTPException(500, f"Field dictionary unavailable: {exc}")
 
 
+@app.get("/api/rftemplates")
+async def list_rftemplates(org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("org_config").select(
+        "mist_token,cloud_endpoint,mist_org_id"
+    ).eq("org_id", org_id).maybe_single().execute()
+    if not row.data:
+        raise HTTPException(404, "Org not configured. POST /api/org/connect first.")
+    token = decrypt(row.data["mist_token"])
+    base_url = mist.build_base_url(row.data["cloud_endpoint"])
+    mist_org_id = row.data["mist_org_id"]
+    templates = await mist.get_rftemplates(token, base_url, mist_org_id)
+    return [{"id": t["id"], "name": t["name"]} for t in templates if "id" in t and "name" in t]
+
+
 @app.post("/api/fields/refresh")
 async def refresh_fields(_: str = Depends(get_org_id)):
     try:
