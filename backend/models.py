@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel
 
 
@@ -15,7 +17,7 @@ class OrgSettingsRequest(BaseModel):
 class StandardCreate(BaseModel):
     name: str
     description: str | None = None
-    scope: str                   # wlan | site
+    scope: Literal["wlan", "site", "org"]
     filter: list | None = None
     check_field: str
     check_condition: str

@@ -80,7 +80,12 @@ def evaluate_site(
             continue
 
         scope = std["scope"]
-        targets = wlans if scope == "wlan" else ([site_setting] if site_setting else [])
+        if scope == "wlan":
+            targets = wlans
+        elif scope == "site":
+            targets = [site_setting] if site_setting else []
+        else:
+            continue
 
         if not targets:
             findings.append({

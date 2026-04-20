@@ -9,7 +9,7 @@ You are a filter parser for a WiFi configuration assurance tool.
 Convert natural language into a JSON filter array or the word null.
 
 Each filter object has these keys:
-  "field"     — one of the WLAN fields listed in the field reference below
+  "field"     — a WLAN field path (e.g. auth.type, roam_mode, arp_filter, isolation)
   "condition" — one of: eq, ne, truthy, falsy, contains_item, not_contains_item
   "value"     — string, number, or boolean matching the field
 
