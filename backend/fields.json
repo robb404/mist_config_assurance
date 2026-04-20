@@ -81,9 +81,7 @@
   "auth.anticlog_threshold": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "16\u201332"
-    ],
+    "values": [],
     "notes": "SAE anti-clogging (default: 16)"
   },
   "roam_mode": {
@@ -275,9 +273,11 @@
     "scope": "wlan",
     "type": "string",
     "values": [
-      "same",
-      "as",
-      "above"
+      "no-legacy",
+      "compatible",
+      "high-density",
+      "custom",
+      "legacy-only"
     ],
     "notes": "5 GHz rate template"
   },
@@ -285,28 +285,24 @@
     "scope": "wlan",
     "type": "string",
     "values": [
-      "same",
-      "as",
-      "above"
+      "no-legacy",
+      "compatible",
+      "high-density",
+      "custom",
+      "legacy-only"
     ],
     "notes": "6 GHz rate template"
   },
   "rateset.24.min_rssi": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "dBm",
-      "(0=disabled)"
-    ],
+    "values": [],
     "notes": "Min RSSI to associate on 2.4 GHz"
   },
   "rateset.5.min_rssi": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "dBm",
-      "(0=disabled)"
-    ],
+    "values": [],
     "notes": "Min RSSI to associate on 5 GHz"
   },
   "wlan_limit_up_enabled": {
@@ -321,9 +317,7 @@
   "wlan_limit_up": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "kbps"
-    ],
+    "values": [],
     "notes": "Per-SSID upload cap"
   },
   "wlan_limit_down_enabled": {
@@ -338,9 +332,7 @@
   "wlan_limit_down": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "kbps"
-    ],
+    "values": [],
     "notes": "Per-SSID download cap"
   },
   "client_limit_up_enabled": {
@@ -355,9 +347,7 @@
   "client_limit_up": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "kbps"
-    ],
+    "values": [],
     "notes": "Per-client upload cap"
   },
   "client_limit_down_enabled": {
@@ -372,9 +362,7 @@
   "client_limit_down": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "kbps"
-    ],
+    "values": [],
     "notes": "Per-client download cap"
   },
   "hide_ssid": {
@@ -398,9 +386,7 @@
   "vlan_id": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "1\u20134094"
-    ],
+    "values": [],
     "notes": "VLAN ID"
   },
   "dynamic_vlan.enabled": {
@@ -415,19 +401,13 @@
   "max_num_clients": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "0\u2013128",
-      "(0=unlimited)"
-    ],
+    "values": [],
     "notes": "Max simultaneous clients"
   },
   "max_idletime": {
     "scope": "wlan",
     "type": "int",
-    "values": [
-      "60\u201386400",
-      "seconds"
-    ],
+    "values": [],
     "notes": "Client idle timeout (default: 1800)"
   },
   "disable_wmm": {
@@ -489,26 +469,19 @@
   "radio_config.band_24.power": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "dBm",
-      "(0=auto)"
-    ],
+    "values": [],
     "notes": "Tx power"
   },
   "radio_config.band_24.power_min": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "dBm"
-    ],
+    "values": [],
     "notes": "Min Tx power (auto mode)"
   },
   "radio_config.band_24.power_max": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "dBm"
-    ],
+    "values": [],
     "notes": "Max Tx power (auto mode)"
   },
   "radio_config.band_5.disabled": {
@@ -635,37 +608,25 @@
   "rogue.min_rssi": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "dBm",
-      "(default:",
-      "-80)"
-    ],
+    "values": [],
     "notes": "Min RSSI to classify as rogue"
   },
   "rogue.min_duration": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "seconds",
-      "(default:",
-      "10)"
-    ],
+    "values": [],
     "notes": "Min duration to classify as rogue"
   },
   "wids.repeated_auth_failures.threshold": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "count"
-    ],
+    "values": [],
     "notes": "WIDS alert threshold"
   },
   "wids.repeated_auth_failures.duration": {
     "scope": "site",
     "type": "int",
-    "values": [
-      "minutes"
-    ],
+    "values": [],
     "notes": "WIDS observation window"
   },
   "switch_mgmt.protect_re.enabled": {

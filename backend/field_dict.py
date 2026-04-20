@@ -1,3 +1,9 @@
+"""Parse docs/mist-api/field-reference.md into a structured field dictionary.
+
+Each entry maps a dotted field path to {scope, type, values, notes}.
+Regenerate fields.json by running: python -c "from backend.field_dict import save_field_dict; save_field_dict()"
+"""
+
 import json
 import re
 from pathlib import Path
@@ -13,7 +19,7 @@ def _parse_values(raw: str) -> list[str]:
     tokens = re.findall(r"`([^`]+)`", raw)
     if tokens:
         return tokens
-    return [t.strip() for t in re.split(r"[\s/|]+", raw) if t.strip()]
+    return []
 
 
 def build_field_dict() -> dict:
@@ -43,7 +49,7 @@ def build_field_dict() -> dict:
 
 def save_field_dict() -> dict:
     d = build_field_dict()
-    _FIELDS_JSON.write_text(json.dumps(d, indent=2))
+    _FIELDS_JSON.write_text(json.dumps(d, indent=2) + "\n")
     return d
 
 
