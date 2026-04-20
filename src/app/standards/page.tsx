@@ -42,7 +42,7 @@ export default function StandardsPage() {
         <Button onClick={openNew}>Quick Add</Button>
       </div>
 
-      <TemplateLibrary existingNames={standards.map(s => s.name)} onAdded={load} />
+      <TemplateLibrary standards={standards} onAdded={load} />
 
       {standards.length === 0 ? (
         <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50">
