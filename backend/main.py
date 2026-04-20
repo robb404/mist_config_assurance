@@ -142,6 +142,23 @@ async def parse_filter_endpoint(req: ParseFilterRequest, org_id: str = Depends(g
 
 
 # ---------------------------------------------------------------------------
+# Field Dictionary
+# ---------------------------------------------------------------------------
+
+@app.get("/api/fields")
+async def get_fields(org_id: str = Depends(get_org_id)):
+    from .field_dict import get_field_dict
+    return get_field_dict()
+
+
+@app.post("/api/fields/refresh")
+async def refresh_fields(org_id: str = Depends(get_org_id)):
+    from .field_dict import save_field_dict
+    d = save_field_dict()
+    return {"refreshed": len(d)}
+
+
+# ---------------------------------------------------------------------------
 # Sites
 # ---------------------------------------------------------------------------
 
@@ -433,11 +450,21 @@ async def _sync_incidents(
         if auto is None:
             auto = org.get("auto_remediate", False)
 
+        # For wlan-scope standards, determine if the WLAN lives at site or org level.
+        for_site: bool | None = None
+        if std.get("scope") == "wlan" and f.get("wlan_id"):
+            token = decrypt(org["mist_token"])
+            base_url = mist.build_base_url(org["cloud_endpoint"])
+            derived = await mist.get_wlan_derived(token, base_url, site_id, f["wlan_id"])
+            if derived is not None:
+                for_site = bool(derived.get("for_site", True))
+
         action = db.table("remediation_action").insert({
             "incident_id": inc["id"], "org_id": org_id,
             "site_id": site_id, "wlan_id": f.get("wlan_id"),
             "standard_id": f["standard_id"],
             "desired_value": std["remediation_value"],
+            "for_site": for_site,
             "status": "pending",
         }).execute().data[0]
 
@@ -457,7 +484,9 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
         return
 
     result = await apply_remediation(
-        action["site_id"], action.get("wlan_id"), std.data, token, base_url, effective_mist_org_id
+        action["site_id"], action.get("wlan_id"), std.data,
+        token, base_url, effective_mist_org_id,
+        for_site=action.get("for_site"),
     )
 
     now = datetime.now(timezone.utc).isoformat()
