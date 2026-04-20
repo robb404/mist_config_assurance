@@ -48,7 +48,7 @@ async def _get_openai_token(config: dict, org_id: str) -> str:
         expiry_str = config.get("oauth_token_expiry")
         if not expiry_str:
             raise ValueError("OAuth token expiry missing from ai_config. Reconnect OpenAI in Settings.")
-        expiry = datetime.fromisoformat(expiry_str)
+        expiry = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
         if datetime.now(timezone.utc) >= expiry - timedelta(minutes=5):
             async with httpx.AsyncClient() as client:
                 r = await client.post(
@@ -60,7 +60,12 @@ async def _get_openai_token(config: dict, org_id: str) -> str:
                         "refresh_token": decrypt(config["oauth_refresh_token"]),
                     },
                 )
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise ValueError(
+                    f"OpenAI token refresh failed ({exc.response.status_code}). Reconnect in Settings → AI Provider."
+                ) from exc
             data = r.json()
             new_expiry = datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])
             db = get_client()
@@ -116,7 +121,12 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
                     {"role": "user", "content": text},
                 ],
             })
-            r.raise_for_status()
+            try:
+                r.raise_for_status()
+            except httpx.HTTPStatusError as exc:
+                raise ValueError(
+                    f"Ollama request failed ({exc.response.status_code}). Check the Ollama server is running."
+                ) from exc
             raw = r.json()["message"]["content"]
 
     else:

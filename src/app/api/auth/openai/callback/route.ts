@@ -59,6 +59,9 @@ export async function GET(req: NextRequest) {
   } catch {
     return NextResponse.redirect(new URL('/settings?ai_error=token_exchange_failed', req.url))
   }
+  if (!access_token || !refresh_token || !expires_in) {
+    return NextResponse.redirect(new URL('/settings?ai_error=token_exchange_failed', req.url))
+  }
 
   try {
     const clerkToken = await getToken()

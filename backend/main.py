@@ -125,6 +125,12 @@ async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
     }
     if req.api_key:
         payload["api_key"] = encrypt(req.api_key)
+    if not (req.provider == "openai" and req.openai_auth_method == "oauth"):
+        payload.update({
+            "oauth_access_token": None,
+            "oauth_refresh_token": None,
+            "oauth_token_expiry": None,
+        })
     db.table("ai_config").upsert(payload).execute()
     return {"ok": True}
 
