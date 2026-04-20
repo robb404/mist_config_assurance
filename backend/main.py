@@ -120,7 +120,7 @@ async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if req.api_key:
-        payload["api_key"] = encrypt(req.api_key)
+        payload["api_key"] = encrypt(req.api_key.strip())
     db.table("ai_config").upsert(payload).execute()
     return {"ok": True}
 

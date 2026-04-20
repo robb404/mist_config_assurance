@@ -15,6 +15,7 @@ export function AIProviderForm() {
   const [provider, setProvider] = useState<'anthropic' | 'openai' | 'ollama'>('openai')
   const [apiKey, setApiKey] = useState('')
   const [model, setModel] = useState('gpt-4o-mini')
+  const [ollamaModel, setOllamaModel] = useState('')
   const [baseUrl, setBaseUrl] = useState('http://localhost:11434')
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState('')
@@ -24,7 +25,11 @@ export function AIProviderForm() {
       setConfig(data)
       if (data.configured && data.provider) {
         setProvider(data.provider)
-        setModel(data.model ?? 'gpt-4o-mini')
+        if (data.provider === 'ollama') {
+          setOllamaModel(data.model ?? '')
+        } else {
+          setModel(data.model ?? 'gpt-4o-mini')
+        }
         setBaseUrl(data.base_url ?? 'http://localhost:11434')
       }
     }).catch(() => {})
@@ -38,7 +43,7 @@ export function AIProviderForm() {
       await api.saveAIConfig({
         provider,
         api_key: apiKey || null,
-        model,
+        model: provider === 'ollama' ? ollamaModel : model,
         base_url: provider === 'ollama' ? baseUrl : null,
       })
       setMsg('AI provider saved.')
@@ -70,7 +75,7 @@ export function AIProviderForm() {
               <button key={p} type="button"
                 onClick={() => {
                   setProvider(p)
-                  setModel(p === 'anthropic' ? 'claude-haiku-4-5-20251001' : p === 'openai' ? 'gpt-4o-mini' : '')
+                  if (p !== 'ollama') setModel(p === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini')
                 }}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                   provider === p
@@ -130,7 +135,7 @@ export function AIProviderForm() {
             </div>
             <div>
               <label className={labelCls}>Model Name</label>
-              <input type="text" value={model} onChange={e => setModel(e.target.value)}
+              <input type="text" value={ollamaModel} onChange={e => setOllamaModel(e.target.value)}
                 placeholder="llama3.2"
                 className={inputCls} />
             </div>

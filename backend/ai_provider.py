@@ -46,46 +46,55 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
 
     if provider == "anthropic":
         import anthropic
-        client = anthropic.AsyncAnthropic(api_key=decrypt(config["api_key"]))
-        msg = await client.messages.create(
-            model=model,
-            max_tokens=256,
-            system=_SYSTEM_PROMPT,
-            messages=[{"role": "user", "content": text}],
-        )
+        try:
+            client = anthropic.AsyncAnthropic(api_key=decrypt(config["api_key"]))
+            msg = await client.messages.create(
+                model=model,
+                max_tokens=256,
+                system=_SYSTEM_PROMPT,
+                messages=[{"role": "user", "content": text}],
+            )
+        except anthropic.AuthenticationError:
+            raise ValueError("Anthropic API key is invalid. Re-enter it in Settings → AI Provider.")
         raw = msg.content[0].text
 
     elif provider == "openai":
         import openai
-        client = openai.AsyncOpenAI(api_key=decrypt(config["api_key"]))
-        resp = await client.chat.completions.create(
-            model=model,
-            max_tokens=256,
-            messages=[
-                {"role": "system", "content": _SYSTEM_PROMPT},
-                {"role": "user", "content": text},
-            ],
-        )
+        try:
+            client = openai.AsyncOpenAI(api_key=decrypt(config["api_key"]))
+            resp = await client.chat.completions.create(
+                model=model,
+                max_tokens=256,
+                messages=[
+                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "user", "content": text},
+                ],
+            )
+        except openai.AuthenticationError:
+            raise ValueError("OpenAI API key is invalid. Re-enter it in Settings → AI Provider.")
         raw = resp.choices[0].message.content
 
     elif provider == "ollama":
         base_url = config.get("base_url") or "http://localhost:11434"
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            r = await client.post(f"{base_url}/api/chat", json={
-                "model": model,
-                "stream": False,
-                "messages": [
-                    {"role": "system", "content": _SYSTEM_PROMPT},
-                    {"role": "user", "content": text},
-                ],
-            })
-            try:
-                r.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise ValueError(
-                    f"Ollama request failed ({exc.response.status_code}). Check the Ollama server is running."
-                ) from exc
-            raw = r.json()["message"]["content"]
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                r = await client.post(f"{base_url}/api/chat", json={
+                    "model": model,
+                    "stream": False,
+                    "messages": [
+                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "user", "content": text},
+                    ],
+                })
+                try:
+                    r.raise_for_status()
+                except httpx.HTTPStatusError as exc:
+                    raise ValueError(
+                        f"Ollama returned {exc.response.status_code}. Is the model '{model}' pulled?"
+                    ) from exc
+                raw = r.json()["message"]["content"]
+        except httpx.ConnectError:
+            raise ValueError(f"Cannot reach Ollama at {base_url}. Is it running?")
 
     else:
         raise ValueError(f"Unknown provider: {provider}")
