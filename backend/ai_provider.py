@@ -28,6 +28,8 @@ def _build_system_prompt(field_dict: dict | None) -> str:
     if not field_dict:
         return _BASE_SYSTEM_PROMPT
     wlan_fields = {k: v for k, v in field_dict.items() if v.get("scope") == "wlan"}
+    if not wlan_fields:
+        return _BASE_SYSTEM_PROMPT
     lines = ["Field reference (WLAN fields only):"]
     for field, meta in sorted(wlan_fields.items()):
         values = meta.get("values", [])

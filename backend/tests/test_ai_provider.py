@@ -96,7 +96,14 @@ def test_enriched_prompt_includes_field_values():
 
 
 def test_base_prompt_works_without_field_dict():
-    from backend.ai_provider import _build_system_prompt
+    from backend.ai_provider import _build_system_prompt, _BASE_SYSTEM_PROMPT
     prompt = _build_system_prompt(None)
-    assert "filter" in prompt.lower()
-    assert "field" in prompt.lower()
+    assert prompt == _BASE_SYSTEM_PROMPT
+    assert "Field reference" not in prompt
+
+
+def test_build_system_prompt_falls_back_when_no_wlan_fields():
+    from backend.ai_provider import _build_system_prompt, _BASE_SYSTEM_PROMPT
+    field_dict = {"rogue.enabled": {"scope": "site", "type": "bool", "values": ["true", "false"], "notes": ""}}
+    prompt = _build_system_prompt(field_dict)
+    assert prompt == _BASE_SYSTEM_PROMPT
