@@ -14,7 +14,7 @@ from .crypto import decrypt, encrypt
 from .db import get_client
 from .engine import evaluate_site
 from .models import (
-    AIConfigSave, ConnectRequest, OAuthTokensRequest, OrgSettingsRequest,
+    AIConfigSave, ConnectRequest, OrgSettingsRequest,
     ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
 )
 from .remediation import apply_remediation
@@ -103,12 +103,9 @@ async def get_ai_config(org_id: str = Depends(get_org_id)):
     return {
         "configured": True,
         "provider": data["provider"],
-        "openai_auth_method": data.get("openai_auth_method"),
         "model": data["model"],
         "base_url": data.get("base_url"),
         "has_key": bool(data.get("api_key")),
-        "oauth_connected": bool(data.get("oauth_access_token")),
-        "oauth_token_expiry": data.get("oauth_token_expiry"),
     }
 
 
@@ -118,37 +115,13 @@ async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
     payload: dict = {
         "org_id": org_id,
         "provider": req.provider,
-        "openai_auth_method": req.openai_auth_method,
         "model": req.model,
         "base_url": req.base_url,
         "updated_at": datetime.now(timezone.utc).isoformat(),
     }
     if req.api_key:
         payload["api_key"] = encrypt(req.api_key)
-    if not (req.provider == "openai" and req.openai_auth_method == "oauth"):
-        payload.update({
-            "oauth_access_token": None,
-            "oauth_refresh_token": None,
-            "oauth_token_expiry": None,
-        })
     db.table("ai_config").upsert(payload).execute()
-    return {"ok": True}
-
-
-@app.post("/api/ai-config/oauth")
-async def store_oauth_tokens(req: OAuthTokensRequest, org_id: str = Depends(get_org_id)):
-    expiry = datetime.now(timezone.utc) + timedelta(seconds=req.expires_in)
-    db = get_client()
-    db.table("ai_config").upsert({
-        "org_id": org_id,
-        "provider": "openai",
-        "openai_auth_method": "oauth",
-        "oauth_access_token": encrypt(req.access_token),
-        "oauth_refresh_token": encrypt(req.refresh_token),
-        "oauth_token_expiry": expiry.isoformat(),
-        "model": "gpt-4o-mini",
-        "updated_at": datetime.now(timezone.utc).isoformat(),
-    }).execute()
     return {"ok": True}
 
 

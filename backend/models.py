@@ -36,16 +36,9 @@ class RunRequest(BaseModel):
 
 class AIConfigSave(BaseModel):
     provider: str           # anthropic | openai | ollama
-    openai_auth_method: str | None = None  # key | oauth (openai only)
     api_key: str | None = None  # new key — omit to keep existing
     model: str
     base_url: str | None = None  # ollama only
-
-
-class OAuthTokensRequest(BaseModel):
-    access_token: str
-    refresh_token: str
-    expires_in: int         # seconds until expiry
 
 
 class ParseFilterRequest(BaseModel):

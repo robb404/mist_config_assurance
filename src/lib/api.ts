@@ -53,7 +53,6 @@ export const api = {
   getAIConfig: () => request<import('./types').AIConfig>('api/ai-config'),
   saveAIConfig: (body: {
     provider: string
-    openai_auth_method?: string | null
     api_key?: string | null
     model: string
     base_url?: string | null

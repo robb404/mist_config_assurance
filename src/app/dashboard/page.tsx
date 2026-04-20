@@ -17,10 +17,14 @@ export default function DashboardPage() {
     setSites(sites)
     const runMap: Record<string, { passed: number; failed: number }> = {}
     await Promise.all(sites.map(async s => {
-      const { findings } = await api.getSiteFindings(s.id)
-      runMap[s.id] = {
-        passed: findings.filter(f => f.status === 'pass').length,
-        failed: findings.filter(f => f.status === 'fail').length,
+      try {
+        const { findings } = await api.getSiteFindings(s.id)
+        runMap[s.id] = {
+          passed: findings.filter(f => f.status === 'pass').length,
+          failed: findings.filter(f => f.status === 'fail').length,
+        }
+      } catch {
+        runMap[s.id] = { passed: 0, failed: 0 }
       }
     }))
     setRuns(runMap)

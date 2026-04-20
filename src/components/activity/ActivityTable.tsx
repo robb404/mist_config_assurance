@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 import { Incident, RemediationAction } from '@/lib/types'
 import { StatusBadge } from '@/components/ui/StatusBadge'
 import { Button } from '@/components/ui/Button'
@@ -11,11 +12,13 @@ interface Props {
 }
 
 export function ActivityTable({ incidents, actions, onUpdate }: Props) {
+  const [busy, setBusy] = useState<string | null>(null)
   const actionMap = Object.fromEntries(actions.map(a => [a.incident_id, a]))
 
-  async function approve(id: string) { await api.approveRemediation(id); onUpdate() }
-  async function reject(id: string)  { await api.rejectRemediation(id);  onUpdate() }
-  async function suppress(id: string) { await api.suppressIncident(id); onUpdate() }
+  async function run(id: string, fn: () => Promise<unknown>) {
+    setBusy(id)
+    try { await fn() } finally { setBusy(null); onUpdate() }
+  }
 
   return (
     <div className="bg-surface-lowest rounded-lg overflow-hidden">
@@ -33,6 +36,7 @@ export function ActivityTable({ incidents, actions, onUpdate }: Props) {
         <tbody>
           {incidents.map(inc => {
             const action = actionMap[inc.id]
+            const isBusy = busy === inc.id
             return (
               <tr key={inc.id} className="border-t border-surface-base hover:bg-surface-low transition-colors">
                 <td className="px-4 py-3 font-medium">{inc.title}</td>
@@ -43,12 +47,27 @@ export function ActivityTable({ incidents, actions, onUpdate }: Props) {
                 <td className="px-4 py-3 text-right space-x-2">
                   {inc.status === 'open' && action?.status === 'pending' && (
                     <>
-                      <Button variant="primary" size="sm" onClick={() => approve(action.id)}>Approve Fix</Button>
-                      <Button variant="ghost" size="sm" onClick={() => reject(action.id)}>Reject</Button>
+                      <Button variant="primary" size="sm" disabled={isBusy}
+                        onClick={() => run(inc.id, () => api.approveRemediation(action.id))}>
+                        {isBusy ? 'Fixing…' : 'Approve Fix'}
+                      </Button>
+                      <Button variant="ghost" size="sm" disabled={isBusy}
+                        onClick={() => run(inc.id, () => api.rejectRemediation(action.id))}>
+                        Reject
+                      </Button>
                     </>
                   )}
+                  {inc.status === 'open' && action?.status === 'failed' && (
+                    <Button variant="primary" size="sm" disabled={isBusy}
+                      onClick={() => run(inc.id, () => api.retryRemediation(action.id))}>
+                      {isBusy ? 'Fixing…' : 'Retry Fix'}
+                    </Button>
+                  )}
                   {inc.status === 'open' && (
-                    <Button variant="ghost" size="sm" onClick={() => suppress(inc.id)}>Suppress</Button>
+                    <Button variant="ghost" size="sm" disabled={isBusy}
+                      onClick={() => run(inc.id, () => api.suppressIncident(inc.id))}>
+                      Suppress
+                    </Button>
                   )}
                   {action && <StatusBadge status={action.status} />}
                 </td>

@@ -83,10 +83,7 @@ export interface ValidationRun {
 export interface AIConfig {
   configured: boolean
   provider?: 'anthropic' | 'openai' | 'ollama'
-  openai_auth_method?: 'key' | 'oauth' | null
   model?: string
   base_url?: string | null
   has_key?: boolean
-  oauth_connected?: boolean
-  oauth_token_expiry?: string | null
 }

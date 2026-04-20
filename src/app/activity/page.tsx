@@ -1,24 +1,31 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
+import { useRouter } from 'next/navigation'
 import { PageShell } from '@/components/layout/PageShell'
 import { ActivityTable } from '@/components/activity/ActivityTable'
 import { api } from '@/lib/api'
 import type { Incident, RemediationAction } from '@/lib/types'
 
 export default function ActivityPage() {
+  const router = useRouter()
   const [incidents, setIncidents] = useState<Incident[]>([])
   const [actions, setActions] = useState<RemediationAction[]>([])
 
-  async function load() {
+  const load = useCallback(async () => {
     const [{ incidents }, { actions }] = await Promise.all([
       api.listIncidents(),
       api.listPendingRemediation(),
     ])
     setIncidents(incidents)
     setActions(actions)
-  }
+    router.refresh()
+  }, [router])
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    const id = setInterval(load, 15000)
+    return () => clearInterval(id)
+  }, [load])
 
   return (
     <PageShell>

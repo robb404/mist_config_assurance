@@ -1,11 +1,8 @@
 import json
-import os
-from datetime import datetime, timedelta, timezone
 
 import httpx
 
-from .crypto import decrypt, encrypt
-from .db import get_client
+from .crypto import decrypt
 
 _SYSTEM_PROMPT = """\
 You are a filter parser for a WiFi configuration assurance tool.
@@ -42,44 +39,6 @@ def _parse_raw(raw: str) -> list | None:
     return result
 
 
-async def _get_openai_token(config: dict, org_id: str) -> str:
-    """Return a valid OpenAI bearer token, refreshing via OAuth if needed."""
-    if config.get("openai_auth_method") == "oauth":
-        expiry_str = config.get("oauth_token_expiry")
-        if not expiry_str:
-            raise ValueError("OAuth token expiry missing from ai_config. Reconnect OpenAI in Settings.")
-        expiry = datetime.fromisoformat(expiry_str.replace("Z", "+00:00"))
-        if datetime.now(timezone.utc) >= expiry - timedelta(minutes=5):
-            async with httpx.AsyncClient() as client:
-                r = await client.post(
-                    "https://auth.openai.com/oauth/token",
-                    data={
-                        "grant_type": "refresh_token",
-                        "client_id": os.environ["OPENAI_CLIENT_ID"],
-                        "client_secret": os.environ["OPENAI_CLIENT_SECRET"],
-                        "refresh_token": decrypt(config["oauth_refresh_token"]),
-                    },
-                )
-            try:
-                r.raise_for_status()
-            except httpx.HTTPStatusError as exc:
-                raise ValueError(
-                    f"OpenAI token refresh failed ({exc.response.status_code}). Reconnect in Settings → AI Provider."
-                ) from exc
-            data = r.json()
-            new_expiry = datetime.now(timezone.utc) + timedelta(seconds=data["expires_in"])
-            db = get_client()
-            db.table("ai_config").update({
-                "oauth_access_token": encrypt(data["access_token"]),
-                "oauth_refresh_token": encrypt(data.get("refresh_token", decrypt(config["oauth_refresh_token"]))),
-                "oauth_token_expiry": new_expiry.isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            }).eq("org_id", org_id).execute()
-            return data["access_token"]
-        return decrypt(config["oauth_access_token"])
-    return decrypt(config["api_key"])
-
-
 async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
     """Call the configured LLM provider and return a filter array or None."""
     provider = config["provider"]
@@ -98,8 +57,7 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
 
     elif provider == "openai":
         import openai
-        token = await _get_openai_token(config, org_id)
-        client = openai.AsyncOpenAI(api_key=token)
+        client = openai.AsyncOpenAI(api_key=decrypt(config["api_key"]))
         resp = await client.chat.completions.create(
             model=model,
             max_tokens=256,

@@ -22,6 +22,9 @@ export function Sidebar() {
 
       <div className="px-3 mb-4">
         <OrganizationSwitcher
+          afterSelectOrganizationUrl="/dashboard"
+          afterCreateOrganizationUrl="/dashboard"
+          afterLeaveOrganizationUrl="/dashboard"
           appearance={{ elements: { rootBox: 'w-full', organizationSwitcherTrigger: 'w-full rounded-lg px-3 py-2 text-sm bg-surface-high' } }}
         />
       </div>
