@@ -10,18 +10,15 @@ import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import type { Standard } from '@/lib/types'
 
-type FormMode = 'quick' | 'advanced'
-
 export default function StandardsPage() {
   const [standards, setStandards] = useState<Standard[]>([])
   const [editing, setEditing] = useState<Partial<Standard> | null>(null)
   const [open, setOpen] = useState(false)
-  const [mode, setMode] = useState<FormMode>('quick')
 
   const load = useCallback(async () => { const { standards } = await api.listStandards(); setStandards(standards) }, [])
 
-  function openNew(m: FormMode = 'quick') { setMode(m); setEditing({}); setOpen(true) }
-  function openEdit(s: Standard) { setMode('advanced'); setEditing(s); setOpen(true) }
+  function openNew() { setEditing({}); setOpen(true) }
+  function openEdit(s: Standard) { setEditing(s); setOpen(true) }
   function close() { setOpen(false); setEditing(null) }
 
   async function save(data: Omit<Standard, 'id' | 'org_id' | 'created_at'>) {
@@ -42,17 +39,14 @@ export default function StandardsPage() {
     <PageShell>
       <div className="flex items-center justify-between mb-8">
         <h1 className="font-display text-2xl font-semibold text-primary tracking-tight">Standards</h1>
-        <div className="flex gap-2">
-          <Button onClick={() => openNew('quick')}>Quick Add</Button>
-          <Button variant="ghost" onClick={() => openNew('advanced')}>Advanced</Button>
-        </div>
+        <Button onClick={openNew}>Quick Add</Button>
       </div>
 
       <TemplateLibrary existingNames={standards.map(s => s.name)} onAdded={load} />
 
       {standards.length === 0 ? (
         <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50">
-          No standards yet. <button onClick={() => openNew('quick')} className="text-primary underline">Add one</button>
+          No standards yet. <button onClick={openNew} className="text-primary underline">Add one</button>
         </div>
       ) : (
         <StandardsTable standards={standards} onEdit={openEdit} onRefresh={load} />
@@ -61,9 +55,9 @@ export default function StandardsPage() {
       <SlideOver
         open={open}
         onClose={close}
-        title={isEditing ? 'Edit Standard' : mode === 'quick' ? 'Quick Add Standards' : 'New Standard'}>
+        title={isEditing ? 'Edit Standard' : 'Quick Add Standards'}>
         {editing !== null && (
-          isEditing || mode === 'advanced' ? (
+          isEditing ? (
             <StandardForm initial={editing} onSave={save} onCancel={close} />
           ) : (
             <QuickAddForm
