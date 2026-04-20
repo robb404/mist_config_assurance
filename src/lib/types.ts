@@ -19,7 +19,7 @@ export interface Standard {
   org_id: string
   name: string
   description?: string
-  scope: 'wlan' | 'site'
+  scope: 'wlan' | 'site' | 'org'
   filter?: object[]
   check_field: string
   check_condition: string

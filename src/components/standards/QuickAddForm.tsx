@@ -2,31 +2,14 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
-import type { AIConfig } from '@/lib/types'
-
-const WLAN_FIELDS = new Set([
-  'auth.type', 'auth.owe', 'auth.pairwise', 'auth.enable_beacon_protection',
-  'auth.eap_reauth', 'auth.multi_psk_only', 'auth.anticlog_threshold',
-  'auth.enable_gcmp256', 'auth.enable_mac_auth', 'auth.force_lookup',
-  'roam_mode', 'arp_filter', 'limit_bcast', 'allow_mdns', 'allow_ssdp',
-  'allow_ipv6_ndp', 'enable_wireless_bridging', 'isolation', 'l2_isolation',
-  'no_static_ip', 'no_static_dns', 'block_blacklist_clients',
-  'band_steer', 'band_steer_force_band5', 'bands',
-  'disable_ht_vht_rates', 'disable_11ax', 'disable_11be',
-  'rateset.24.template', 'rateset.5.template', 'rateset.6.template',
-  'rateset.24.min_rssi', 'rateset.5.min_rssi',
-  'wlan_limit_up_enabled', 'wlan_limit_up', 'wlan_limit_down_enabled', 'wlan_limit_down',
-  'client_limit_up_enabled', 'client_limit_up', 'client_limit_down_enabled', 'client_limit_down',
-  'hide_ssid', 'vlan_enabled', 'vlan_id', 'dynamic_vlan.enabled',
-  'max_num_clients', 'max_idletime', 'disable_wmm', 'disable_uapsd',
-  'qos.class', 'limit_probe_response',
-])
+import type { AIConfig, FieldDict } from '@/lib/types'
 
 type Filter = Array<{ field: string; condition: string; value?: unknown }>
 
 interface DerivedStandard {
   field: string
-  scope: 'wlan' | 'site'
+  scope: 'wlan' | 'site' | 'org'
+  recognised: boolean
   name: string
   check_condition: string
   check_value: unknown
@@ -37,8 +20,10 @@ interface DerivedStandard {
   filterError: string
 }
 
-function deriveFromEntry(field: string, value: unknown): DerivedStandard {
-  const scope = WLAN_FIELDS.has(field) ? 'wlan' : 'site'
+function deriveFromEntry(field: string, value: unknown, fieldDict: FieldDict): DerivedStandard {
+  const entry = fieldDict[field]
+  const scope = (entry?.scope as 'wlan' | 'site' | 'org') ?? 'wlan'
+  const recognised = !!entry
   const name = field
     .replace(/\./g, ' ')
     .replace(/_/g, ' ')
@@ -62,7 +47,7 @@ function deriveFromEntry(field: string, value: unknown): DerivedStandard {
   }
 
   return {
-    field, scope, name, check_condition, check_value,
+    field, scope, recognised, name, check_condition, check_value,
     remediation_value: value,
     filter: null, filterText: '', filterParsing: false, filterError: '',
   }
@@ -97,9 +82,14 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
   const [addingId, setAddingId] = useState<string | null>(null)
   const [added, setAdded] = useState<Set<string>>(new Set())
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
+  const [fieldDict, setFieldDict] = useState<FieldDict>({})
 
   useEffect(() => {
     api.getAIConfig().then(setAiConfig).catch(() => {})
+  }, [])
+
+  useEffect(() => {
+    api.getFields().then(setFieldDict).catch(() => {})
   }, [])
 
   function parseJson() {
@@ -116,7 +106,7 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
       setParseError('Expected a JSON object (key-value pairs), not an array or primitive')
       return
     }
-    setStandards(Object.entries(parsed).map(([k, v]) => deriveFromEntry(k, v)))
+    setStandards(Object.entries(parsed).map(([k, v]) => deriveFromEntry(k, v, fieldDict)))
   }
 
   function updateStd(idx: number, patch: Partial<DerivedStandard>) {
@@ -222,6 +212,16 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
                       <span className="text-primary/70 uppercase tracking-wide text-[10px] font-semibold mr-1">{s.scope}</span>
                       Check: {checkSummary(s)} · Fix: {s.field} → {JSON.stringify(s.remediation_value)}
                     </p>
+                    {!s.recognised && (
+                      <span className="inline-block mt-1 text-[10px] font-medium px-1.5 py-0.5 rounded bg-warning/10 text-warning">
+                        unrecognized field
+                      </span>
+                    )}
+                    {s.recognised && fieldDict[s.field]?.notes && (
+                      <span className="text-on-surface/40 text-xs mt-0.5 block">
+                        {fieldDict[s.field].notes}
+                      </span>
+                    )}
                   </div>
                   <button
                     disabled={alreadyAdded || addingId === s.field || addingAll}
