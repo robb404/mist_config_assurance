@@ -170,6 +170,8 @@ async def list_rftemplates(org_id: str = Depends(get_org_id)):
     token = decrypt(row.data["mist_token"])
     base_url = mist.build_base_url(row.data["cloud_endpoint"])
     mist_org_id = row.data["mist_org_id"]
+    if not mist_org_id:
+        raise HTTPException(400, "Mist org ID not configured. Reconnect via POST /api/org/connect.")
     templates = await mist.get_rftemplates(token, base_url, mist_org_id)
     return [{"id": t["id"], "name": t["name"]} for t in templates if "id" in t and "name" in t]
 

@@ -1,5 +1,6 @@
 import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
+from backend.mist_client import get_rftemplates
 
 
 @pytest.mark.asyncio
@@ -12,7 +13,6 @@ async def test_get_rftemplates_success():
         mock_ctx.get = AsyncMock(return_value=mock_resp)
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_ctx)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
-        from backend.mist_client import get_rftemplates
         result = await get_rftemplates("tok", "https://api.mist.com/api/v1/", "org1")
     assert result == raw
 
@@ -25,7 +25,6 @@ async def test_get_rftemplates_api_failure():
         mock_ctx.get = AsyncMock(return_value=mock_resp)
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_ctx)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
-        from backend.mist_client import get_rftemplates
         result = await get_rftemplates("tok", "https://api.mist.com/api/v1/", "org1")
     assert result == []
 
@@ -39,6 +38,5 @@ async def test_get_rftemplates_non_list_response():
         mock_ctx.get = AsyncMock(return_value=mock_resp)
         mock_cls.return_value.__aenter__ = AsyncMock(return_value=mock_ctx)
         mock_cls.return_value.__aexit__ = AsyncMock(return_value=None)
-        from backend.mist_client import get_rftemplates
         result = await get_rftemplates("tok", "https://api.mist.com/api/v1/", "org1")
     assert result == []
