@@ -52,8 +52,7 @@ export const TABS: TabConfig[] = [
               name: 'Fast Roaming (802.11r)',
               description: 'Enable 802.11r Fast BSS Transition for seamless roaming. Skipped on open/OWE WLANs.',
               filter: [
-                { field: 'auth.type', condition: 'eq', value: 'psk' },
-                { field: 'auth.type', condition: 'eq', value: 'eap' },
+                { field: 'auth.type', condition: 'in', value: ['psk', 'eap'] },
               ],
               check_field: 'roam_mode', check_condition: 'eq', check_value: '11r',
               remediation_field: 'roam_mode', remediation_value: '11r',

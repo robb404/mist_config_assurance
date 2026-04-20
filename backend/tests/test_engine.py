@@ -76,8 +76,7 @@ FAST_ROAMING_STD = [{
     "check_condition": "eq",
     "check_value": "11r",
     "filter": [
-        {"field": "auth.type", "condition": "eq", "value": "psk"},
-        {"field": "auth.type", "condition": "eq", "value": "eap"},
+        {"field": "auth.type", "condition": "in", "value": ["psk", "eap"]},
     ],
 }]
 
@@ -107,7 +106,8 @@ def test_fast_roaming_open_skip():
 
 
 def test_fast_roaming_owe_skip():
-    # OWE WLANs in Mist have auth.type="open" with auth.owe="required"
+    # OWE WLANs report auth.type="open" in Mist. The filter only matches
+    # "psk" and "eap", so this WLAN is skipped regardless of auth.owe.
     wlan = {"id": "w1", "ssid": "Guest-OWE", "auth": {"type": "open", "owe": "required"}, "roam_mode": "none"}
     findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
     assert findings[0]["status"] == "skip"
@@ -127,6 +127,7 @@ def test_fast_roaming_mixed_site():
         {"id": "w3", "ssid": "Guest", "auth": {"type": "open"}, "roam_mode": "none"},
     ]
     findings = evaluate_site("s", "S", wlans, {}, FAST_ROAMING_STD)
+    assert len(findings) == 3
     by_wlan = {f["wlan_id"]: f["status"] for f in findings}
     assert by_wlan["w1"] == "fail"
     assert by_wlan["w2"] == "pass"
