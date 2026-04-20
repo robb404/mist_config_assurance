@@ -1,7 +1,8 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
+import type { AIConfig } from '@/lib/types'
 
 const WLAN_FIELDS = new Set([
   'auth.type', 'auth.owe', 'auth.pairwise', 'auth.enable_beacon_protection',
@@ -95,6 +96,11 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
   const [addingAll, setAddingAll] = useState(false)
   const [addingId, setAddingId] = useState<string | null>(null)
   const [added, setAdded] = useState<Set<string>>(new Set())
+  const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
+
+  useEffect(() => {
+    api.getAIConfig().then(setAiConfig).catch(() => {})
+  }, [])
 
   function parseJson() {
     setParseError('')
@@ -231,7 +237,18 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
 
                 <div>
                   <label className={labelCls}>
-                    Applies to <span className="normal-case font-normal opacity-60">(optional — describe which WLANs/sites)</span>
+                    Applies to{' '}
+                    <span className="normal-case font-normal opacity-60">(optional — describe which WLANs/sites)</span>
+                    {aiConfig?.configured && (
+                      <span className="ml-2 normal-case font-normal text-primary/50">
+                        via {aiConfig.provider} / {aiConfig.model}
+                      </span>
+                    )}
+                    {!aiConfig?.configured && (
+                      <span className="ml-2 normal-case font-normal text-warning/70">
+                        — no AI configured
+                      </span>
+                    )}
                   </label>
                   <div className="flex gap-2">
                     <input
@@ -245,7 +262,8 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
                     <button
                       type="button"
                       onClick={() => parseFilterForStd(idx)}
-                      disabled={s.filterParsing || !s.filterText.trim()}
+                      disabled={s.filterParsing || !s.filterText.trim() || !aiConfig?.configured}
+                      title={aiConfig?.configured ? `${aiConfig.provider} / ${aiConfig.model}` : 'Configure an AI provider in Settings first'}
                       className="shrink-0 px-3 py-2 text-xs font-medium bg-primary/10 text-primary rounded-lg hover:bg-primary/20 disabled:opacity-40 transition-colors">
                       {s.filterParsing ? '…' : '✦ AI'}
                     </button>
