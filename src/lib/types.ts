@@ -87,3 +87,12 @@ export interface AIConfig {
   base_url?: string | null
   has_key?: boolean
 }
+
+export interface FieldEntry {
+  scope: 'wlan' | 'site' | 'org'
+  type: string
+  values: string[]
+  notes: string
+}
+
+export type FieldDict = Record<string, FieldEntry>

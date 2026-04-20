@@ -62,4 +62,5 @@ export const api = {
       'api/ai/parse-filter',
       { method: 'POST', body: JSON.stringify({ text }) }
     ),
+  getFields: () => request<import('./types').FieldDict>('api/fields'),
 }
