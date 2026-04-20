@@ -1,3 +1,4 @@
+import json
 import logging
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
@@ -13,6 +14,7 @@ from .auth import get_org_id
 from .crypto import decrypt, encrypt
 from .db import get_client
 from .engine import evaluate_site
+from .field_dict import get_field_dict, save_field_dict
 from .models import (
     AIConfigSave, ConnectRequest, OrgSettingsRequest,
     ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
@@ -146,16 +148,22 @@ async def parse_filter_endpoint(req: ParseFilterRequest, org_id: str = Depends(g
 # ---------------------------------------------------------------------------
 
 @app.get("/api/fields")
-async def get_fields(org_id: str = Depends(get_org_id)):
-    from .field_dict import get_field_dict
-    return get_field_dict()
+async def get_fields(_: str = Depends(get_org_id)):
+    try:
+        return get_field_dict()
+    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        raise HTTPException(500, f"Field dictionary unavailable: {exc}")
 
 
 @app.post("/api/fields/refresh")
-async def refresh_fields(org_id: str = Depends(get_org_id)):
-    from .field_dict import save_field_dict
-    d = save_field_dict()
-    return {"refreshed": len(d)}
+async def refresh_fields(_: str = Depends(get_org_id)):
+    try:
+        d = save_field_dict()
+        return {"refreshed": len(d), "ok": True}
+    except PermissionError:
+        raise HTTPException(500, "Cannot write fields.json — check file permissions in container")
+    except Exception as exc:
+        raise HTTPException(500, f"Refresh failed: {exc}")
 
 
 # ---------------------------------------------------------------------------
