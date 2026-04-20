@@ -70,7 +70,7 @@ export const TABS: TabConfig[] = [
               { label: 'Compatible', value: 'compatible' },
             ],
             getStandards: (val = 'no-legacy') =>
-              (['24', '5', '6'] as const).map(band => ({
+              ['24', '5', '6'].map(band => ({
                 ...W,
                 name: `Data Rates — ${band === '24' ? '2.4' : band} GHz (${val})`,
                 description: `Set ${band === '24' ? '2.4' : band} GHz rate template to ${val}.`,
