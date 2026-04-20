@@ -56,6 +56,12 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
             )
         except anthropic.AuthenticationError:
             raise ValueError("Anthropic API key is invalid. Re-enter it in Settings → AI Provider.")
+        except anthropic.PermissionDeniedError as exc:
+            raise ValueError(f"Anthropic access denied: {exc.message}") from exc
+        except anthropic.BadRequestError as exc:
+            if "credit" in str(exc).lower() or "billing" in str(exc).lower():
+                raise ValueError("Anthropic account has no credits. Add billing at console.anthropic.com.") from exc
+            raise
         raw = msg.content[0].text
 
     elif provider == "openai":
