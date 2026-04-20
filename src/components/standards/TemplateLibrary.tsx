@@ -16,15 +16,16 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
   const [selections, setSelections] = useState<Record<string, string>>({})
   const [adding, setAdding] = useState<Set<string>>(new Set())
   const [rfTemplates, setRfTemplates] = useState<RfTemplate[]>([])
+  const [rfTemplatesLoaded, setRfTemplatesLoaded] = useState(false)
   const [rfError, setRfError] = useState(false)
 
   useEffect(() => {
-    if (open && activeTab === 'site' && rfTemplates.length === 0 && !rfError) {
+    if (open && activeTab === 'site' && !rfTemplatesLoaded) {
       api.getRftemplates()
-        .then(setRfTemplates)
-        .catch(() => setRfError(true))
+        .then(data => { setRfTemplates(data); setRfTemplatesLoaded(true) })
+        .catch(() => { setRfError(true); setRfTemplatesLoaded(true) })
     }
-  }, [open, activeTab, rfTemplates.length, rfError])
+  }, [open, activeTab, rfTemplatesLoaded])
 
   async function addTemplate(card: TemplateCard, selectedValue?: string) {
     const toCreate = card.getStandards(selectedValue)
