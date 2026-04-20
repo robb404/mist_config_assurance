@@ -96,3 +96,8 @@ export interface FieldEntry {
 }
 
 export type FieldDict = Record<string, FieldEntry>
+
+export interface RfTemplate {
+  id: string
+  name: string
+}

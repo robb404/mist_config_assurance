@@ -63,4 +63,5 @@ export const api = {
       { method: 'POST', body: JSON.stringify({ text }) }
     ),
   getFields: () => request<import('./types').FieldDict>('api/fields'),
+  getRftemplates: () => request<import('./types').RfTemplate[]>('api/rftemplates'),
 }
