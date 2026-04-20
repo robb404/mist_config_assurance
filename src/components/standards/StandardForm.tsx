@@ -79,6 +79,7 @@ export function StandardForm({ initial, onSave, onCancel }: Props) {
           className="w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30">
           <option value="wlan">WLAN</option>
           <option value="site">Site</option>
+          <option value="org">Org</option>
         </select>
       </div>
 

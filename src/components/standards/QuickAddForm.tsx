@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import type { AIConfig, FieldDict } from '@/lib/types'
@@ -22,7 +22,7 @@ interface DerivedStandard {
 
 function deriveFromEntry(field: string, value: unknown, fieldDict: FieldDict): DerivedStandard {
   const entry = fieldDict[field]
-  const scope = (entry?.scope as 'wlan' | 'site' | 'org') ?? 'wlan'
+  const scope = entry?.scope ?? 'wlan'
   const recognised = !!entry
   const name = field
     .replace(/\./g, ' ')
@@ -82,6 +82,7 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
   const [addingId, setAddingId] = useState<string | null>(null)
   const [added, setAdded] = useState<Set<string>>(new Set())
   const [aiConfig, setAiConfig] = useState<AIConfig | null>(null)
+  const fieldDictRef = useRef<FieldDict>({})
   const [fieldDict, setFieldDict] = useState<FieldDict>({})
 
   useEffect(() => {
@@ -89,7 +90,7 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
   }, [])
 
   useEffect(() => {
-    api.getFields().then(setFieldDict).catch(() => {})
+    api.getFields().then(d => { fieldDictRef.current = d; setFieldDict(d) }).catch(() => {})
   }, [])
 
   function parseJson() {
@@ -106,7 +107,7 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
       setParseError('Expected a JSON object (key-value pairs), not an array or primitive')
       return
     }
-    setStandards(Object.entries(parsed).map(([k, v]) => deriveFromEntry(k, v, fieldDict)))
+    setStandards(Object.entries(parsed).map(([k, v]) => deriveFromEntry(k, v, fieldDictRef.current)))
   }
 
   function updateStd(idx: number, patch: Partial<DerivedStandard>) {
