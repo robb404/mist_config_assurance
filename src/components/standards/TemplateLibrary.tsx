@@ -35,6 +35,9 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
         await api.createStandard(std)
       }
       onAdded()
+    } catch (err) {
+      console.error('Template add failed', err)
+      onAdded()
     } finally {
       setAdding(prev => { const n = new Set(prev); n.delete(card.key); return n })
     }
@@ -95,7 +98,7 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
                       !(isDynamic && rfError)
 
                     return (
-                      <div key={card.key} className="bg-surface-lowest rounded-xl p-3 flex flex-col">
+                      <div key={card.key} className="bg-surface-lowest rounded-lg p-3 flex flex-col">
                         <p className="text-sm font-semibold text-on-surface mb-1">{card.title}</p>
                         <p className="text-xs text-on-surface/50 mb-3 flex-1">{card.description}</p>
 
