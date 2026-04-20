@@ -1,0 +1,709 @@
+{
+  "auth.type": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "open",
+      "psk",
+      "eap",
+      "eap192",
+      "wep"
+    ],
+    "notes": "Primary auth method"
+  },
+  "auth.owe": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "disabled",
+      "enabled",
+      "required"
+    ],
+    "notes": "OWE (Enhanced Open); only when type=open"
+  },
+  "auth.pairwise": {
+    "scope": "wlan",
+    "type": "list",
+    "values": [
+      "wpa1-ccmp",
+      "wpa1-tkip",
+      "wpa2-ccmp",
+      "wpa2-tkip",
+      "wpa3"
+    ],
+    "notes": "Encryption suites"
+  },
+  "auth.enable_beacon_protection": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "802.11w / PMF"
+  },
+  "auth.enable_gcmp256": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "GCMP-256 (WPA3-Enterprise 192-bit)"
+  },
+  "auth.enable_mac_auth": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "MAC authentication"
+  },
+  "auth.eap_reauth": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Force EAP re-auth on roam"
+  },
+  "auth.multi_psk_only": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Require per-user PSK"
+  },
+  "auth.anticlog_threshold": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "16\u201332"
+    ],
+    "notes": "SAE anti-clogging (default: 16)"
+  },
+  "roam_mode": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "none",
+      "OKC",
+      "11r"
+    ],
+    "notes": "Fast roaming mode (top-level, not nested in auth)"
+  },
+  "auth.force_lookup": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Force RADIUS lookup even with cached PMK"
+  },
+  "arp_filter": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Proxy ARP \u2014 reduces broadcast, prevents ARP spoofing"
+  },
+  "limit_bcast": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Drop non-essential broadcast/multicast frames"
+  },
+  "allow_mdns": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Allow mDNS when limit_bcast=true (default: false)"
+  },
+  "allow_ssdp": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Allow SSDP when limit_bcast=true (default: false)"
+  },
+  "allow_ipv6_ndp": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Allow IPv6 NDP when limit_bcast=true (default: true)"
+  },
+  "enable_wireless_bridging": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Allow client-to-client bridging (default: false)"
+  },
+  "isolation": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Block client-to-client traffic"
+  },
+  "l2_isolation": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Block L2 LAN access (requires isolation=true)"
+  },
+  "no_static_ip": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Only allow DHCP-assigned clients"
+  },
+  "no_static_dns": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Only allow DHCP-assigned DNS"
+  },
+  "block_blacklist_clients": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Block up to 256 blacklisted MACs"
+  },
+  "band_steer": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Steer dual-band clients to 5 GHz"
+  },
+  "band_steer_force_band5": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Force all capable clients to 5 GHz"
+  },
+  "bands": {
+    "scope": "wlan",
+    "type": "list",
+    "values": [
+      "24",
+      "5",
+      "6"
+    ],
+    "notes": "Enabled bands"
+  },
+  "disable_ht_vht_rates": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable HT/VHT MCS rates"
+  },
+  "disable_11ax": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable Wi-Fi 6 (802.11ax)"
+  },
+  "disable_11be": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable Wi-Fi 7 (802.11be)"
+  },
+  "rateset.24.template": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "no-legacy",
+      "compatible",
+      "high-density",
+      "custom",
+      "legacy-only"
+    ],
+    "notes": "2.4 GHz rate template"
+  },
+  "rateset.5.template": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "same",
+      "as",
+      "above"
+    ],
+    "notes": "5 GHz rate template"
+  },
+  "rateset.6.template": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "same",
+      "as",
+      "above"
+    ],
+    "notes": "6 GHz rate template"
+  },
+  "rateset.24.min_rssi": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "dBm",
+      "(0=disabled)"
+    ],
+    "notes": "Min RSSI to associate on 2.4 GHz"
+  },
+  "rateset.5.min_rssi": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "dBm",
+      "(0=disabled)"
+    ],
+    "notes": "Min RSSI to associate on 5 GHz"
+  },
+  "wlan_limit_up_enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable per-SSID upload cap"
+  },
+  "wlan_limit_up": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "kbps"
+    ],
+    "notes": "Per-SSID upload cap"
+  },
+  "wlan_limit_down_enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable per-SSID download cap"
+  },
+  "wlan_limit_down": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "kbps"
+    ],
+    "notes": "Per-SSID download cap"
+  },
+  "client_limit_up_enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable per-client upload cap"
+  },
+  "client_limit_up": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "kbps"
+    ],
+    "notes": "Per-client upload cap"
+  },
+  "client_limit_down_enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable per-client download cap"
+  },
+  "client_limit_down": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "kbps"
+    ],
+    "notes": "Per-client download cap"
+  },
+  "hide_ssid": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Hide SSID from beacons (default: false)"
+  },
+  "vlan_enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable VLAN tagging"
+  },
+  "vlan_id": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "1\u20134094"
+    ],
+    "notes": "VLAN ID"
+  },
+  "dynamic_vlan.enabled": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "RADIUS-assigned VLANs"
+  },
+  "max_num_clients": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "0\u2013128",
+      "(0=unlimited)"
+    ],
+    "notes": "Max simultaneous clients"
+  },
+  "max_idletime": {
+    "scope": "wlan",
+    "type": "int",
+    "values": [
+      "60\u201386400",
+      "seconds"
+    ],
+    "notes": "Client idle timeout (default: 1800)"
+  },
+  "disable_wmm": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable WMM/QoS (default: false)"
+  },
+  "disable_uapsd": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable U-APSD power save (default: false)"
+  },
+  "qos.class": {
+    "scope": "wlan",
+    "type": "string",
+    "values": [
+      "background",
+      "best_effort",
+      "video",
+      "voice"
+    ],
+    "notes": "WMM queue"
+  },
+  "limit_probe_response": {
+    "scope": "wlan",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Limit probe responses (high-density)"
+  },
+  "radio_config.band_24.disabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable 2.4 GHz radio"
+  },
+  "radio_config.band_24.bandwidth": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "20",
+      "40"
+    ],
+    "notes": "Channel width (default: 20)"
+  },
+  "radio_config.band_24.power": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "dBm",
+      "(0=auto)"
+    ],
+    "notes": "Tx power"
+  },
+  "radio_config.band_24.power_min": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "dBm"
+    ],
+    "notes": "Min Tx power (auto mode)"
+  },
+  "radio_config.band_24.power_max": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "dBm"
+    ],
+    "notes": "Max Tx power (auto mode)"
+  },
+  "radio_config.band_5.disabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable 5 GHz radio"
+  },
+  "radio_config.band_5.bandwidth": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "20",
+      "40",
+      "80"
+    ],
+    "notes": "Channel width (default: 40)"
+  },
+  "radio_config.band_6.disabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable 6 GHz radio"
+  },
+  "radio_config.band_6.bandwidth": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "20",
+      "40",
+      "80",
+      "160"
+    ],
+    "notes": "Channel width"
+  },
+  "radio_config.rrm_managed": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "RRM auto-management"
+  },
+  "wifi.enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Master WiFi enable"
+  },
+  "wifi.mesh_enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "AP mesh networking"
+  },
+  "wifi.proxy_arp": {
+    "scope": "site",
+    "type": "string",
+    "values": [
+      "default",
+      "enabled",
+      "disabled"
+    ],
+    "notes": "Proxy ARP at site level"
+  },
+  "wifi.enable_arp_spoof_check": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "ARP spoofing detection"
+  },
+  "wifi.disable_11k": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Disable 802.11k neighbor reports"
+  },
+  "enable_unii_4": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Enable U-NII-4 channels (169/173/177)"
+  },
+  "rogue.enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Rogue AP detection"
+  },
+  "rogue.honeypot_enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Honeypot SSID detection"
+  },
+  "rogue.min_rssi": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "dBm",
+      "(default:",
+      "-80)"
+    ],
+    "notes": "Min RSSI to classify as rogue"
+  },
+  "rogue.min_duration": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "seconds",
+      "(default:",
+      "10)"
+    ],
+    "notes": "Min duration to classify as rogue"
+  },
+  "wids.repeated_auth_failures.threshold": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "count"
+    ],
+    "notes": "WIDS alert threshold"
+  },
+  "wids.repeated_auth_failures.duration": {
+    "scope": "site",
+    "type": "int",
+    "values": [
+      "minutes"
+    ],
+    "notes": "WIDS observation window"
+  },
+  "switch_mgmt.protect_re.enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "Protect Routing Engine"
+  },
+  "switch_mgmt.tacacs.enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "TACACS+ authentication"
+  },
+  "switch_mgmt.tacacs.default_role": {
+    "scope": "site",
+    "type": "string",
+    "values": [
+      "admin",
+      "none",
+      "read",
+      "helpdesk"
+    ],
+    "notes": "Default TACACS role"
+  },
+  "switch_mgmt.fips_enabled": {
+    "scope": "site",
+    "type": "bool",
+    "values": [
+      "true",
+      "false"
+    ],
+    "notes": "FIPS 140-2 mode"
+  }
+}
