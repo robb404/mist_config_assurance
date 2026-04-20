@@ -3,6 +3,12 @@ import { NextResponse } from 'next/server'
 import crypto from 'crypto'
 
 export async function GET() {
+  const clientId = process.env.OPENAI_CLIENT_ID
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (!clientId || !appUrl) {
+    return NextResponse.json({ error: 'OpenAI OAuth not configured' }, { status: 503 })
+  }
+
   const { orgId } = await auth()
   if (!orgId) {
     return NextResponse.json({ error: 'No active organization' }, { status: 403 })
@@ -11,8 +17,8 @@ export async function GET() {
   const state = crypto.randomBytes(16).toString('hex')
 
   const params = new URLSearchParams({
-    client_id: process.env.OPENAI_CLIENT_ID!,
-    redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/openai/callback`,
+    client_id: clientId,
+    redirect_uri: `${appUrl}/api/auth/openai/callback`,
     response_type: 'code',
     state,
   })

@@ -11,7 +11,7 @@ export default function SettingsPage() {
       </div>
       <div className="space-y-10 max-w-lg">
         <OrgSetupForm />
-        <Suspense>
+        <Suspense fallback={<div className="bg-surface-lowest rounded-lg p-6 animate-pulse h-48" />}>
           <AIProviderForm />
         </Suspense>
       </div>

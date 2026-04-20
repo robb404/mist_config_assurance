@@ -4,6 +4,13 @@ import { NextRequest, NextResponse } from 'next/server'
 const BACKEND = process.env.BACKEND_URL ?? 'http://localhost:8001'
 
 export async function GET(req: NextRequest) {
+  const clientId = process.env.OPENAI_CLIENT_ID
+  const clientSecret = process.env.OPENAI_CLIENT_SECRET
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL
+  if (!clientId || !clientSecret || !appUrl) {
+    return NextResponse.redirect(new URL('/settings?ai_error=store_failed', req.url))
+  }
+
   const { getToken, orgId } = await auth()
   if (!orgId) {
     return NextResponse.redirect(new URL('/settings?ai_error=no_org', req.url))
@@ -32,10 +39,10 @@ export async function GET(req: NextRequest) {
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body: new URLSearchParams({
       grant_type: 'authorization_code',
-      client_id: process.env.OPENAI_CLIENT_ID!,
-      client_secret: process.env.OPENAI_CLIENT_SECRET!,
+      client_id: clientId,
+      client_secret: clientSecret,
       code,
-      redirect_uri: `${process.env.NEXT_PUBLIC_APP_URL}/api/auth/openai/callback`,
+      redirect_uri: `${appUrl}/api/auth/openai/callback`,
     }),
   })
 

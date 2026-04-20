@@ -1,9 +1,17 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
-import { AIConfig } from '@/lib/types'
+import type { AIConfig } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
+
+const AI_ERROR_MESSAGES: Record<string, string> = {
+  no_org: 'No active organisation — select one and try again.',
+  state_mismatch: 'OAuth state mismatch. Please try again.',
+  no_code: 'No authorisation code returned by OpenAI.',
+  token_exchange_failed: 'Token exchange with OpenAI failed.',
+  store_failed: 'Could not save OAuth credentials.',
+}
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30 focus:outline-primary'
 const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
@@ -41,8 +49,9 @@ export function AIProviderForm() {
       setMsg('OpenAI connected successfully.')
       router.replace('/settings')
     }
-    if (searchParams.get('ai_error')) {
-      setMsg(`Connection failed: ${searchParams.get('ai_error')}`)
+    const aiError = searchParams.get('ai_error')
+    if (aiError) {
+      setMsg(`Connection failed: ${AI_ERROR_MESSAGES[aiError] ?? 'Unknown error.'}`)
       router.replace('/settings')
     }
   }, [searchParams, router])
@@ -97,7 +106,7 @@ export function AIProviderForm() {
               <button key={p} type="button"
                 onClick={() => {
                   setProvider(p)
-                  setModel(p === 'anthropic' ? 'claude-haiku-4-5-20251001' : p === 'openai' ? 'gpt-4o-mini' : model)
+                  setModel(p === 'anthropic' ? 'claude-haiku-4-5-20251001' : p === 'openai' ? 'gpt-4o-mini' : '')
                 }}
                 className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors capitalize ${
                   provider === p

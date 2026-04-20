@@ -79,6 +79,9 @@ function checkSummary(s: DerivedStandard): string {
   return `${s.field} = ${JSON.stringify(s.check_value)}`
 }
 
+const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30 focus:outline-primary'
+const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
+
 interface Props {
   existingNames: string[]
   onAdded: () => void
@@ -147,6 +150,9 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
       })
       setAdded(prev => new Set([...prev, s.field]))
       onAdded()
+    } catch (err: unknown) {
+      updateStd(idx, { filterError: err instanceof Error ? err.message : 'Save failed' })
+      throw err
     } finally {
       setAddingId(null)
     }
@@ -164,9 +170,6 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
       setAddingAll(false)
     }
   }
-
-  const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30 focus:outline-primary'
-  const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
 
   return (
     <div className="space-y-6">
@@ -215,7 +218,7 @@ export function QuickAddForm({ existingNames, onAdded, onCancel }: Props) {
                     </p>
                   </div>
                   <button
-                    disabled={alreadyAdded || addingId === s.field}
+                    disabled={alreadyAdded || addingId === s.field || addingAll}
                     onClick={() => addOne(idx)}
                     className={`shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg transition-colors ${
                       alreadyAdded

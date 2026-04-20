@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { PageShell } from '@/components/layout/PageShell'
 import { StandardsTable } from '@/components/standards/StandardsTable'
 import { StandardForm } from '@/components/standards/StandardForm'
@@ -18,7 +18,7 @@ export default function StandardsPage() {
   const [open, setOpen] = useState(false)
   const [mode, setMode] = useState<FormMode>('quick')
 
-  async function load() { const { standards } = await api.listStandards(); setStandards(standards) }
+  const load = useCallback(async () => { const { standards } = await api.listStandards(); setStandards(standards) }, [])
 
   function openNew(m: FormMode = 'quick') { setMode(m); setEditing({}); setOpen(true) }
   function openEdit(s: Standard) { setMode('advanced'); setEditing(s); setOpen(true) }
@@ -34,7 +34,7 @@ export default function StandardsPage() {
     load()
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { load() }, [load])
 
   const isEditing = !!(editing as Standard)?.id
 
