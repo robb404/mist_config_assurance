@@ -79,3 +79,24 @@ def test_parse_filter_ollama_null_response():
 def test_parse_filter_raises_when_no_config():
     with pytest.raises((TypeError, KeyError, AttributeError)):
         asyncio.run(parse_filter("PSK only", None, "org_1"))
+
+
+def test_enriched_prompt_includes_field_values():
+    """When field_dict is provided, system prompt should include valid values."""
+    from backend.ai_provider import _build_system_prompt
+    field_dict = {
+        "auth.type": {"scope": "wlan", "type": "string", "values": ["open", "psk", "eap"], "notes": "Primary auth method"},
+        "roam_mode": {"scope": "wlan", "type": "string", "values": ["none", "OKC", "11r"], "notes": "Fast roaming mode"},
+    }
+    prompt = _build_system_prompt(field_dict)
+    assert "auth.type" in prompt
+    assert "psk" in prompt
+    assert "eap" in prompt
+    assert "roam_mode" in prompt
+
+
+def test_base_prompt_works_without_field_dict():
+    from backend.ai_provider import _build_system_prompt
+    prompt = _build_system_prompt(None)
+    assert "filter" in prompt.lower()
+    assert "field" in prompt.lower()

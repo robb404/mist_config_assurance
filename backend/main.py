@@ -131,16 +131,20 @@ async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
 async def parse_filter_endpoint(req: ParseFilterRequest, org_id: str = Depends(get_org_id)):
     db = get_client()
     row = db.table("ai_config").select("*").eq("org_id", org_id).maybe_single().execute()
-    if not row or not row.data:
-        raise HTTPException(400, "No AI provider configured. Visit Settings → AI Provider to set one up.")
+    if not row.data:
+        raise HTTPException(400, "No AI provider configured. Go to Settings → AI Provider.")
     try:
-        result = await _ai_parse_filter(req.text, row.data, org_id)
-        return {"filter": result}
+        field_dict = get_field_dict()
+    except (FileNotFoundError, json.JSONDecodeError):
+        field_dict = None
+    try:
+        result = await _ai_parse_filter(req.text, row.data, org_id, field_dict=field_dict)
     except ValueError as exc:
-        raise HTTPException(422, str(exc))
+        raise HTTPException(400, str(exc))
     except Exception as exc:
         log.error("AI parse-filter error: %s", exc)
-        raise HTTPException(502, f"AI provider error: {exc}")
+        raise HTTPException(500, "AI provider error")
+    return {"filter": result}
 
 
 # ---------------------------------------------------------------------------

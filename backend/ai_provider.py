@@ -4,14 +4,12 @@ import httpx
 
 from .crypto import decrypt
 
-_SYSTEM_PROMPT = """\
+_BASE_SYSTEM_PROMPT = """\
 You are a filter parser for a WiFi configuration assurance tool.
 Convert natural language into a JSON filter array or the word null.
 
 Each filter object has these keys:
-  "field"     — one of: auth.type, auth.owe, auth.pairwise, auth.enable_beacon_protection,
-                roam_mode, arp_filter, limit_bcast, enable_wireless_bridging, isolation,
-                band_steer, hide_ssid, no_static_ip, rogue.enabled, wifi.enable_arp_spoof_check
+  "field"     — one of the WLAN fields listed in the field reference below
   "condition" — one of: eq, ne, truthy, falsy, contains_item, not_contains_item
   "value"     — string, number, or boolean matching the field
 
@@ -24,6 +22,25 @@ Examples:
   "all WLANs" / "no filter" → null
 
 Respond with ONLY a valid JSON array or the single word null. No explanation, no markdown fences."""
+
+
+def _build_system_prompt(field_dict: dict | None) -> str:
+    if not field_dict:
+        return _BASE_SYSTEM_PROMPT
+    wlan_fields = {k: v for k, v in field_dict.items() if v.get("scope") == "wlan"}
+    lines = ["Field reference (WLAN fields only):"]
+    for field, meta in sorted(wlan_fields.items()):
+        values = meta.get("values", [])
+        notes = meta.get("notes", "")
+        val_str = ", ".join(f'"{v}"' for v in values) if values else ""
+        line = f"  {field} ({meta.get('type', 'unknown')})"
+        if val_str:
+            line += f": {val_str}"
+        if notes:
+            line += f" — {notes}"
+        lines.append(line)
+    field_ref = "\n".join(lines)
+    return f"{_BASE_SYSTEM_PROMPT}\n\n{field_ref}"
 
 
 def _parse_raw(raw: str) -> list | None:
@@ -39,8 +56,9 @@ def _parse_raw(raw: str) -> list | None:
     return result
 
 
-async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
+async def parse_filter(text: str, config: dict, org_id: str, field_dict: dict | None = None) -> list | None:
     """Call the configured LLM provider and return a filter array or None."""
+    system_prompt = _build_system_prompt(field_dict)
     provider = config["provider"]
     model = config["model"]
 
@@ -51,7 +69,7 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
             msg = await client.messages.create(
                 model=model,
                 max_tokens=256,
-                system=_SYSTEM_PROMPT,
+                system=system_prompt,
                 messages=[{"role": "user", "content": text}],
             )
         except anthropic.AuthenticationError:
@@ -72,7 +90,7 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
                 model=model,
                 max_tokens=256,
                 messages=[
-                    {"role": "system", "content": _SYSTEM_PROMPT},
+                    {"role": "system", "content": system_prompt},
                     {"role": "user", "content": text},
                 ],
             )
@@ -88,7 +106,7 @@ async def parse_filter(text: str, config: dict, org_id: str) -> list | None:
                     "model": model,
                     "stream": False,
                     "messages": [
-                        {"role": "system", "content": _SYSTEM_PROMPT},
+                        {"role": "system", "content": system_prompt},
                         {"role": "user", "content": text},
                     ],
                 })
