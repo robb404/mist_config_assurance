@@ -61,3 +61,73 @@ def test_disabled_standard_skipped():
 def test_no_wlans_returns_skip_for_wlan_scope():
     findings = evaluate_site("s", "S", [], {}, _std("truthy"))
     assert findings[0]["status"] == "skip"
+
+
+# ---------------------------------------------------------------------------
+# Fast Roaming (802.11r) filter tests
+# ---------------------------------------------------------------------------
+
+FAST_ROAMING_STD = [{
+    "id": "fr1",
+    "name": "Fast Roaming (802.11r)",
+    "scope": "wlan",
+    "enabled": True,
+    "check_field": "roam_mode",
+    "check_condition": "eq",
+    "check_value": "11r",
+    "filter": [
+        {"field": "auth.type", "condition": "eq", "value": "psk"},
+        {"field": "auth.type", "condition": "eq", "value": "eap"},
+    ],
+}]
+
+
+def test_fast_roaming_psk_pass():
+    wlan = {"id": "w1", "ssid": "Corp", "auth": {"type": "psk"}, "roam_mode": "11r"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "pass"
+
+
+def test_fast_roaming_psk_fail():
+    wlan = {"id": "w1", "ssid": "Corp", "auth": {"type": "psk"}, "roam_mode": "none"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "fail"
+
+
+def test_fast_roaming_eap_pass():
+    wlan = {"id": "w1", "ssid": "Dot1x", "auth": {"type": "eap"}, "roam_mode": "11r"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "pass"
+
+
+def test_fast_roaming_open_skip():
+    wlan = {"id": "w1", "ssid": "Guest", "auth": {"type": "open"}, "roam_mode": "none"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "skip"
+
+
+def test_fast_roaming_owe_skip():
+    # OWE WLANs in Mist have auth.type="open" with auth.owe="required"
+    wlan = {"id": "w1", "ssid": "Guest-OWE", "auth": {"type": "open", "owe": "required"}, "roam_mode": "none"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "skip"
+
+
+def test_fast_roaming_no_auth_skip():
+    # WLAN with no auth field at all — _resolve returns None, filter doesn't match
+    wlan = {"id": "w1", "ssid": "Legacy", "roam_mode": "11r"}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "skip"
+
+
+def test_fast_roaming_mixed_site():
+    wlans = [
+        {"id": "w1", "ssid": "Corp",  "auth": {"type": "psk"}, "roam_mode": "none"},
+        {"id": "w2", "ssid": "Dot1x", "auth": {"type": "eap"}, "roam_mode": "11r"},
+        {"id": "w3", "ssid": "Guest", "auth": {"type": "open"}, "roam_mode": "none"},
+    ]
+    findings = evaluate_site("s", "S", wlans, {}, FAST_ROAMING_STD)
+    by_wlan = {f["wlan_id"]: f["status"] for f in findings}
+    assert by_wlan["w1"] == "fail"
+    assert by_wlan["w2"] == "pass"
+    assert by_wlan["w3"] == "skip"
