@@ -701,8 +701,8 @@ async def _rerun_all_sites(org_id: str, org: dict):
 
 
 async def run_drift_for_org(org_id: str):
-    """Called by APScheduler for scheduled drift checks."""
-    log.info("Scheduled drift check for org=%s", org_id)
+    """Called by APScheduler for scheduled drift checks (polling and daily webhook safety scan)."""
+    log.info("Drift check starting for org=%s", org_id)
     try:
         org = _get_org_or_404(org_id)
     except HTTPException:
@@ -711,8 +711,27 @@ async def run_drift_for_org(org_id: str):
 
     db = get_client()
     sites = db.table("site").select("*").eq("org_id", org_id).eq("monitored", True).execute()
+    site_list = sites.data or []
+    if not site_list:
+        return
 
-    for site in (sites.data or []):
+    interval_mins = org.get("drift_interval_mins", 5) or 5
+    sleep_secs = (interval_mins * 60) / len(site_list) if len(site_list) > 1 else 0
+
+    for i, site in enumerate(site_list):
+        # Stagger: sleep before each site after the first
+        if i > 0 and sleep_secs > 0:
+            await asyncio.sleep(sleep_secs)
+
+        # Rate limit: skip this site if check budget is exhausted
+        org_fresh = db.table("org_config").select("calls_used_this_hour,calls_window_start") \
+            .eq("org_id", org_id).maybe_single().execute()
+        if org_fresh.data:
+            calls_used, _ = _reset_window_if_needed(org_fresh.data)
+            if not can_check(calls_used):
+                log.warning("Rate budget exhausted: skipping site=%s (calls_used=%d)", site["id"], calls_used)
+                continue
+
         check_error: str | None = None
         try:
             token = decrypt(org["mist_token"])
@@ -721,6 +740,10 @@ async def run_drift_for_org(org_id: str):
             site_setting = await mist.get_site_setting(token, base_url, site["id"])
             site_entity = await mist.get_site(token, base_url, site["id"])
             site_setting = {**site_setting, **{k: site_entity.get(k) for k in remediation._SITE_ENTITY_FIELDS}}
+
+            # Count the 3 API calls we just made
+            increment_calls(org_id)
+
             stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
             findings = evaluate_site(site["id"], site["name"], wlans, site_setting, stds.data or [])
             passed  = sum(1 for f in findings if f["status"] == "pass")
@@ -741,3 +764,5 @@ async def run_drift_for_org(org_id: str):
                 "last_checked_at": datetime.now(timezone.utc).isoformat(),
                 "check_error": check_error,
             }).eq("id", site["id"]).eq("org_id", org_id).execute()
+
+    log.info("Drift check complete for org=%s (%d sites)", org_id, len(site_list))
