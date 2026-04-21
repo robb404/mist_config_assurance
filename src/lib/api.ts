@@ -7,7 +7,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => null)
     throw new Error(body?.detail ?? res.statusText ?? 'Request failed')
   }
-  if (res.status === 204 || res.headers.get('content-length') === '0') return null
+  if (res.status === 204 || res.headers.get('content-length') === '0') return null as T
   return res.json()
 }
 

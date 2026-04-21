@@ -2,8 +2,8 @@ node_modules
 .next
 .env
 .env.*
-backend
-docs
+.git
 __pycache__
 *.pyc
-.git
+.pytest_cache
+.superpowers
