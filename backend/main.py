@@ -726,11 +726,13 @@ async def run_drift_for_org(org_id: str):
         # Rate limit: skip this site if check budget is exhausted
         org_fresh = db.table("org_config").select("calls_used_this_hour,calls_window_start") \
             .eq("org_id", org_id).maybe_single().execute()
-        if org_fresh.data:
-            calls_used, _ = _reset_window_if_needed(org_fresh.data)
-            if not can_check(calls_used):
-                log.warning("Rate budget exhausted: skipping site=%s (calls_used=%d)", site["id"], calls_used)
-                continue
+        if not org_fresh.data:
+            log.warning("Rate budget check failed (org row missing): skipping site=%s", site["id"])
+            continue
+        calls_used, _ = _reset_window_if_needed(org_fresh.data)
+        if not can_check(calls_used):
+            log.warning("Rate budget exhausted: skipping site=%s (calls_used=%d)", site["id"], calls_used)
+            continue
 
         check_error: str | None = None
         try:
