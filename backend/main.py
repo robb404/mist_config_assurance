@@ -15,7 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import mist_client as mist
 from . import scheduler as sched
 from .ai_provider import parse_filter as _ai_parse_filter
-from .auth import get_org_id
+from .auth import get_org_id, get_user_id
 from .crypto import decrypt, encrypt
 from .db import get_client
 from .engine import evaluate_site
@@ -59,7 +59,11 @@ app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], all
 # ---------------------------------------------------------------------------
 
 @app.post("/api/org/connect")
-async def connect(req: ConnectRequest, org_id: str = Depends(get_org_id)):
+async def connect(
+    req: ConnectRequest,
+    org_id: str = Depends(get_org_id),
+    user_id: str = Depends(get_user_id),
+):
     base_url = mist.build_base_url(req.cloud_endpoint)
     try:
         info = await mist.get_org_info(req.mist_token, base_url, req.mist_org_id)
@@ -77,6 +81,7 @@ async def connect(req: ConnectRequest, org_id: str = Depends(get_org_id)):
         "cloud_endpoint": req.cloud_endpoint,
         "org_name": info["org_name"],
         "mist_org_id": info["org_id"],
+        "owner_user_id": user_id,
     }).execute()
     return {"org_name": info["org_name"], "mist_org_id": info["org_id"]}
 

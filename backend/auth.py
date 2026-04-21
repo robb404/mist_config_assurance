@@ -42,3 +42,27 @@ async def get_org_id(
     if not org_id:
         raise HTTPException(403, "No active Clerk organization. Select one in the UI.")
     return org_id
+
+
+async def get_user_id(
+    authorization: str = Header(...),
+) -> str:
+    """FastAPI dependency — verifies Clerk JWT and returns the Clerk user_id (`sub` claim)."""
+    if not authorization.startswith("Bearer "):
+        raise HTTPException(401, "Missing Bearer token")
+    token = authorization.removeprefix("Bearer ")
+    try:
+        client = _get_jwks_client()
+        signing_key = client.get_signing_key_from_jwt(token)
+        payload = jwt.decode(
+            token,
+            signing_key.key,
+            algorithms=["RS256"],
+            options={"verify_aud": False},
+        )
+    except jwt.PyJWTError:
+        raise HTTPException(401, "Invalid token")
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(401, "Missing sub claim")
+    return user_id
