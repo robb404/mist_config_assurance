@@ -74,9 +74,17 @@ docs/                  Setup, deployment, design system docs
   superpowers/           Specs and implementation plans for major features
 ```
 
-## Design system
+## Documentation
 
-The UI follows an in-house design system documented in [`docs/DESIGN.md`](docs/DESIGN.md) — surface hierarchy, typography (Manrope + Inter), Signature Gradient for primary actions, status colors for healthy/drift/error states.
+| Doc | What's in it |
+|---|---|
+| [`docs/SETUP.md`](docs/SETUP.md) | Supabase, Clerk, Resend, env vars, first-run walkthrough |
+| [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker production deploy, reverse-proxy notes, updating |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Component diagram, drift lifecycle, scheduler modes, security model |
+| [`docs/CUSTOMER_IMPACT.md`](docs/CUSTOMER_IMPACT.md) | Problem statement, day-one value, quantified impact, fit per vertical |
+| [`docs/EXAMPLE_OUTPUT.md`](docs/EXAMPLE_OUTPUT.md) | Annotated screens, sample CSV export, email digest, webhook timing |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | 10-15 min presentation outline mapped to judging criteria |
+| [`docs/DESIGN.md`](docs/DESIGN.md) | Visual design system — tokens, typography, patterns |
 
 ## License
 
