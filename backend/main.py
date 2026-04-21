@@ -7,10 +7,14 @@ import os
 import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import httpx
+from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+
+load_dotenv(Path(__file__).resolve().parent / ".env")
 
 from . import mist_client as mist
 from . import scheduler as sched
