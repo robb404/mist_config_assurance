@@ -137,6 +137,7 @@ async def get_org_usage(org_id: str = Depends(get_org_id)):
 @app.post("/api/org/webhook/setup")
 async def setup_webhook(org_id: str = Depends(get_org_id)):
     """Generate (or regenerate) the webhook secret for this org. Returns the plaintext secret once."""
+    _get_org_or_404(org_id)
     secret = secrets.token_hex(32)
     db = get_client()
     db.table("org_config").update({"webhook_secret": encrypt(secret)}) \
@@ -151,7 +152,7 @@ async def mist_webhook(org_id: str, request: Request):
     Validates HMAC-SHA256 signature, then triggers a check for each affected site.
     """
     body = await request.body()
-    signature = request.headers.get("X-Mist-Signature", "")
+    signature = request.headers.get("X-Mist-Signature-v2", "")
 
     db = get_client()
     row = db.table("org_config").select("webhook_secret,mode") \

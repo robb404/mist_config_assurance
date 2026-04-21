@@ -84,7 +84,7 @@ POST /api/webhooks/mist/{org_id}
 ```
 
 - Mist POSTs audit events here when any config change occurs on a site in the org.
-- The backend validates the payload using HMAC-SHA256 with the stored `webhook_secret`.
+- The backend validates the payload using HMAC-SHA256 (via Mist's `X-Mist-Signature-v2` header) with the stored `webhook_secret`.
 - On validation success, a single-site check is triggered for the affected site (same logic as a manual run).
 - In webhook mode, the staggered scheduler is **paused** — no periodic polling runs.
 

@@ -491,7 +491,7 @@ async def mist_webhook(org_id: str, request: Request):
     Validates HMAC-SHA256 signature, then triggers a check for each affected site.
     """
     body = await request.body()
-    signature = request.headers.get("X-Mist-Signature", "")
+    signature = request.headers.get("X-Mist-Signature-v2", "")
 
     db = get_client()
     row = db.table("org_config").select("webhook_secret,mode") \
@@ -711,13 +711,13 @@ export async function POST(
 ) {
   const { org_id } = await params
   const body = await req.text()
-  const signature = req.headers.get('X-Mist-Signature') ?? ''
+  const signature = req.headers.get('X-Mist-Signature-v2') ?? ''
 
   const res = await fetch(`${BACKEND}/api/webhooks/mist/${org_id}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'X-Mist-Signature': signature,
+      'X-Mist-Signature-v2': signature,
     },
     body,
     signal: AbortSignal.timeout(10_000),
