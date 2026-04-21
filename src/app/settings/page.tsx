@@ -2,6 +2,7 @@ import { PageShell } from '@/components/layout/PageShell'
 import { OrgSetupForm } from '@/components/settings/OrgSetupForm'
 import { AIProviderForm } from '@/components/settings/AIProviderForm'
 import { ApiUsagePanel } from '@/components/settings/ApiUsagePanel'
+import { EmailDigestForm } from '@/components/settings/EmailDigestForm'
 
 export default function SettingsPage() {
   return (
@@ -12,6 +13,7 @@ export default function SettingsPage() {
       <div className="space-y-10 max-w-lg">
         <OrgSetupForm />
         <ApiUsagePanel />
+        <EmailDigestForm />
         <AIProviderForm />
       </div>
     </PageShell>
