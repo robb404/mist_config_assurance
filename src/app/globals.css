@@ -26,6 +26,9 @@
   --color-error-container: #FFDAD6;
   --color-healthy: #10B981;
   --color-drift: #F97316;
+  --color-danger: #BA1A1A;
+  --color-warning: #F97316;
+  --color-border: #CBD5E0;
 
   /* Typography */
   --font-family-display: 'Manrope', sans-serif;
