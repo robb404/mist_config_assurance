@@ -1,10 +1,15 @@
+import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import os
+import secrets
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 
 import httpx
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from . import mist_client as mist
@@ -20,6 +25,10 @@ from .models import (
     ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
 )
 from .remediation import apply_remediation
+from . import remediation
+from .rate_limiter import (
+    budget_summary, can_check, increment_calls, min_interval_mins, _reset_window_if_needed,
+)
 
 log = logging.getLogger("mist_ca")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -28,12 +37,15 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     sched.start()
-    # Reload all existing org schedules on startup
     db = get_client()
-    orgs = db.table("org_config").select("org_id,drift_interval_mins").execute()
+    orgs = db.table("org_config").select("org_id,drift_interval_mins,mode").execute()
     for org in (orgs.data or []):
-        if org["drift_interval_mins"] > 0:
-            sched.upsert_org_job(org["org_id"], org["drift_interval_mins"], run_drift_for_org)
+        sched.upsert_org_job(
+            org["org_id"],
+            org["drift_interval_mins"],
+            run_drift_for_org,
+            mode=org.get("mode", "polling"),
+        )
     yield
     sched.stop()
 
@@ -86,9 +98,92 @@ async def update_settings(req: OrgSettingsRequest, org_id: str = Depends(get_org
     db.table("org_config").update({
         "drift_interval_mins": req.drift_interval_mins,
         "auto_remediate": req.auto_remediate,
+        "mode": req.mode,
     }).eq("org_id", org_id).execute()
-    sched.upsert_org_job(org_id, req.drift_interval_mins, run_drift_for_org)
+    sched.upsert_org_job(org_id, req.drift_interval_mins, run_drift_for_org, mode=req.mode)
     return {"ok": True}
+
+
+@app.get("/api/org/usage")
+async def get_org_usage(org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("org_config").select(
+        "mode,calls_used_this_hour,calls_window_start,drift_interval_mins,webhook_secret"
+    ).eq("org_id", org_id).maybe_single().execute()
+    if not row.data:
+        raise HTTPException(404, "Org not configured")
+
+    site_count = (
+        db.table("site").select("id", count="exact")
+        .eq("org_id", org_id).eq("monitored", True).execute().count or 0
+    )
+
+    data = row.data
+    summary = budget_summary(site_count, data.get("drift_interval_mins", 0))
+    app_url = os.environ.get("APP_URL", "").rstrip("/")
+    webhook_url = f"{app_url}/api/webhooks/mist/{org_id}" if app_url else None
+
+    return {
+        "mode": data.get("mode", "polling"),
+        "calls_used_this_hour": data.get("calls_used_this_hour", 0) or 0,
+        "calls_window_start": data.get("calls_window_start"),
+        "site_count": site_count,
+        "webhook_url": webhook_url,
+        "webhook_configured": bool(data.get("webhook_secret")),
+        **summary,
+    }
+
+
+@app.post("/api/org/webhook/setup")
+async def setup_webhook(org_id: str = Depends(get_org_id)):
+    """Generate (or regenerate) the webhook secret for this org. Returns the plaintext secret once."""
+    secret = secrets.token_hex(32)
+    db = get_client()
+    db.table("org_config").update({"webhook_secret": encrypt(secret)}) \
+        .eq("org_id", org_id).execute()
+    return {"webhook_secret": secret}
+
+
+@app.post("/api/webhooks/mist/{org_id}", status_code=200)
+async def mist_webhook(org_id: str, request: Request):
+    """
+    Public endpoint — no Clerk auth. Mist POSTs audit events here.
+    Validates HMAC-SHA256 signature, then triggers a check for each affected site.
+    """
+    body = await request.body()
+    signature = request.headers.get("X-Mist-Signature", "")
+
+    db = get_client()
+    row = db.table("org_config").select("webhook_secret,mode") \
+        .eq("org_id", org_id).maybe_single().execute()
+    if not row.data or row.data.get("mode") != "webhook":
+        raise HTTPException(404, "Webhook not configured for this org")
+
+    secret_enc = row.data.get("webhook_secret")
+    if not secret_enc:
+        raise HTTPException(400, "Webhook secret not set — run setup first")
+
+    secret = decrypt(secret_enc)
+    expected = hmac.new(secret.encode(), body, hashlib.sha256).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        raise HTTPException(401, "Invalid webhook signature")
+
+    try:
+        payload = json.loads(body)
+    except Exception:
+        raise HTTPException(400, "Invalid JSON payload")
+
+    events = payload.get("events", [])
+    site_ids = {e["site_id"] for e in events if e.get("site_id")}
+    if not site_ids:
+        return {"ok": True, "sites_triggered": 0}
+
+    org = _get_org_or_404(org_id)
+    for site_id in site_ids:
+        asyncio.create_task(_rerun_site(org_id, site_id, org))
+
+    log.info("Mist webhook: org=%s triggered check for %d sites", org_id, len(site_ids))
+    return {"ok": True, "sites_triggered": len(site_ids)}
 
 
 # ---------------------------------------------------------------------------
@@ -277,8 +372,11 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
     try:
         wlans = await mist.get_site_wlans(token, base_url, site_id)
         site_setting = await mist.get_site_setting(token, base_url, site_id)
+        site_entity = await mist.get_site(token, base_url, site_id)
     except Exception as exc:
         raise HTTPException(502, str(exc))
+    # Merge site entity fields (rftemplate_id etc.) into site_setting so standards can check them.
+    site_setting = {**site_setting, **{k: site_entity.get(k) for k in remediation._SITE_ENTITY_FIELDS}}
 
     db = get_client()
     stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
@@ -303,7 +401,7 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
     for f in findings:
         db.table("finding").insert({**f, "run_id": run_id}).execute()
 
-    await _sync_incidents(org_id, site_id, site_name, findings, standards, org, org.get("mist_org_id"))
+    await _sync_incidents(org_id, site_id, site_name, findings, standards, org, org.get("mist_org_id"), wlans=wlans)
 
     db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
         .eq("id", site_id).eq("org_id", org_id).execute()
@@ -430,9 +528,15 @@ async def _sync_incidents(
     org_id: str, site_id: str, site_name: str,
     findings: list[dict], standards: list[dict], org: dict,
     mist_org_id: str | None = None,
+    wlans: list[dict] | None = None,
 ):
     db = get_client()
     std_map = {s["id"]: s for s in standards}
+    # Build for_site lookup from the already-fetched derived WLAN list.
+    # This avoids a second per-finding API call and ensures consistency with what was scanned.
+    wlan_for_site: dict[str, bool | None] = {
+        w["id"]: w.get("for_site") for w in (wlans or []) if "id" in w
+    }
 
     # Resolve open incidents where finding now passes
     open_incidents = db.table("incident").select("*") \
@@ -451,42 +555,56 @@ async def _sync_incidents(
                 "resolved_at": datetime.now(timezone.utc).isoformat(),
             }).eq("id", inc["id"]).execute()
 
-    # Open incident for each new failure
-    existing_open = {
-        (inc["standard_id"], inc.get("wlan_id"))
+    # Build a map of open incidents keyed by (standard_id, wlan_id)
+    open_incident_map: dict[tuple, dict] = {
+        (inc["standard_id"], inc.get("wlan_id")): inc
         for inc in (open_incidents.data or [])
         if inc["status"] == "open"
     }
+
+    # Which open incidents already have an active (pending/approved) remediation action?
+    open_ids = [inc["id"] for inc in (open_incidents.data or []) if inc["status"] == "open"]
+    if open_ids:
+        active_rows = db.table("remediation_action").select("incident_id") \
+            .in_("incident_id", open_ids).in_("status", ["pending", "approved"]).execute()
+        active_incident_ids = {r["incident_id"] for r in (active_rows.data or [])}
+    else:
+        active_incident_ids: set = set()
 
     for f in findings:
         if f["status"] != "fail":
             continue
         key = (f["standard_id"], f.get("wlan_id"))
-        if key in existing_open:
-            continue
         std = std_map.get(f["standard_id"])
         if not std:
             continue
 
-        inc = db.table("incident").insert({
-            "org_id": org_id, "site_id": site_id, "site_name": site_name,
-            "standard_id": f["standard_id"], "title": std["name"],
-            "wlan_id": f.get("wlan_id"), "ssid": f.get("ssid"),
-        }).execute().data[0]
+        existing_inc = open_incident_map.get(key)
+        if existing_inc and existing_inc["id"] in active_incident_ids:
+            # Already has a pending/approved action in flight — don't double-queue
+            continue
 
         # Determine if auto-remediate applies
         auto = std.get("auto_remediate")
         if auto is None:
             auto = org.get("auto_remediate", False)
 
-        # For wlan-scope standards, determine if the WLAN lives at site or org level.
+        # Determine if the WLAN lives at site or org level using the already-fetched derived list.
         for_site: bool | None = None
         if std.get("scope") == "wlan" and f.get("wlan_id"):
-            token = decrypt(org["mist_token"])
-            base_url = mist.build_base_url(org["cloud_endpoint"])
-            derived = await mist.get_wlan_derived(token, base_url, site_id, f["wlan_id"])
-            if derived is not None:
-                for_site = bool(derived.get("for_site", True))
+            raw = wlan_for_site.get(f["wlan_id"])
+            if raw is not None:
+                for_site = bool(raw)
+
+        if existing_inc:
+            # Incident already open but no active action — create a new remediation action
+            inc = existing_inc
+        else:
+            inc = db.table("incident").insert({
+                "org_id": org_id, "site_id": site_id, "site_name": site_name,
+                "standard_id": f["standard_id"], "title": std["name"],
+                "wlan_id": f.get("wlan_id"), "ssid": f.get("ssid"),
+            }).execute().data[0]
 
         action = db.table("remediation_action").insert({
             "incident_id": inc["id"], "org_id": org_id,
@@ -536,7 +654,6 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
             log.info("org-level fix: resolved all open incidents for standard=%s wlan=%s",
                      action["standard_id"], action.get("wlan_id"))
             # Re-run all monitored sites so findings reflect the fix
-            import asyncio
             asyncio.create_task(_rerun_all_sites(org_id, org))
         else:
             db.table("incident").update({"status": "resolved", "resolved_at": now}) \
@@ -551,6 +668,8 @@ async def _rerun_site(org_id: str, site_id: str, org: dict):
         base_url = mist.build_base_url(org["cloud_endpoint"])
         wlans = await mist.get_site_wlans(token, base_url, site_id)
         site_setting = await mist.get_site_setting(token, base_url, site_id)
+        site_entity = await mist.get_site(token, base_url, site_id)
+        site_setting = {**site_setting, **{k: site_entity.get(k) for k in remediation._SITE_ENTITY_FIELDS}}
         db = get_client()
         stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
         site_row = db.table("site").select("name").eq("id", site_id).eq("org_id", org_id).maybe_single().execute()
@@ -565,7 +684,7 @@ async def _rerun_site(org_id: str, site_id: str, org: dict):
         }).execute().data[0]
         for f in findings:
             db.table("finding").insert({**f, "run_id": run["id"]}).execute()
-        await _sync_incidents(org_id, site_id, site_name, findings, stds.data or [], org, org.get("mist_org_id"))
+        await _sync_incidents(org_id, site_id, site_name, findings, stds.data or [], org, org.get("mist_org_id"), wlans=wlans)
         db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
             .eq("id", site_id).eq("org_id", org_id).execute()
         log.info("post-remediation rerun complete site=%s passed=%s failed=%s", site_id, passed, failed)
@@ -593,11 +712,14 @@ async def run_drift_for_org(org_id: str):
     sites = db.table("site").select("*").eq("org_id", org_id).eq("monitored", True).execute()
 
     for site in (sites.data or []):
+        check_error: str | None = None
         try:
             token = decrypt(org["mist_token"])
             base_url = mist.build_base_url(org["cloud_endpoint"])
             wlans = await mist.get_site_wlans(token, base_url, site["id"])
             site_setting = await mist.get_site_setting(token, base_url, site["id"])
+            site_entity = await mist.get_site(token, base_url, site["id"])
+            site_setting = {**site_setting, **{k: site_entity.get(k) for k in remediation._SITE_ENTITY_FIELDS}}
             stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
             findings = evaluate_site(site["id"], site["name"], wlans, site_setting, stds.data or [])
             passed  = sum(1 for f in findings if f["status"] == "pass")
@@ -609,8 +731,12 @@ async def run_drift_for_org(org_id: str):
             }).execute().data[0]
             for f in findings:
                 db.table("finding").insert({**f, "run_id": run["id"]}).execute()
-            await _sync_incidents(org_id, site["id"], site["name"], findings, stds.data or [], org, org.get("mist_org_id"))
-            db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
-                .eq("id", site["id"]).eq("org_id", org_id).execute()
+            await _sync_incidents(org_id, site["id"], site["name"], findings, stds.data or [], org, org.get("mist_org_id"), wlans=wlans)
         except Exception as exc:
             log.exception("Drift check failed for site=%s: %s", site["id"], exc)
+            check_error = str(exc)
+        finally:
+            db.table("site").update({
+                "last_checked_at": datetime.now(timezone.utc).isoformat(),
+                "check_error": check_error,
+            }).eq("id", site["id"]).eq("org_id", org_id).execute()
