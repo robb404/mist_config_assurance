@@ -1,6 +1,22 @@
 # Example Output
 
-Concrete examples of what the tool produces at each stage — findings, remediation events, email digests, CSV exports, and the main UI screens. Screenshots are referenced from `docs/screenshots/` (add your own captures there; the filenames below are the suggested names).
+Concrete examples of what the tool produces at each stage — findings, remediation events, email digests, CSV exports, and the main UI screens.
+
+---
+
+## Sign-in
+
+Clerk-hosted auth. Users sign in with email/password, magic link, or OAuth; every session arrives with a verified JWT that contains the user and active Organization.
+
+![Sign-in](screenshots/signin.png)
+
+---
+
+## Sidebar
+
+Juniper Mist wordmark + `CONFIG ASSURANCE` overline, organization switcher, and top-level navigation — Dashboard, Standards, Activity, Settings. Active item uses the Signature Gradient.
+
+![Sidebar](screenshots/sidebar.png)
 
 ---
 
@@ -79,6 +95,8 @@ Grouped cards per scope — Performance, Radio Band, Network Efficiency (WLAN) a
 
 ### Custom Config drawer
 
+![Custom Config drawer](screenshots/custom-config-drawer.png)
+
 Paste raw Mist JSON:
 
 ```json
@@ -126,6 +144,8 @@ AP Config Persistence,Branch B,,2026-04-20T08:00:22+00:00,resolved,2026-04-20T08
 
 Sent daily or weekly via Resend. Plain text, minimal noise. Skipped entirely on empty windows.
 
+![Email Digest settings](screenshots/email-digest.png)
+
 ```
 Subject: Mist Config Assurance — daily digest (2026-04-22)
 From:    notifications@yourdomain.com
@@ -144,9 +164,9 @@ View details: https://your-app.example.com/activity
 
 ## Settings → API Usage panel
 
-Shows the org's hourly Mist API budget in real time.
+Shows the org's hourly Mist API budget in real time. In **webhook mode** the panel switches to self-healing details: copyable webhook URL, Mist setup steps, and secret regeneration.
 
-![API Usage](screenshots/api-usage.png)
+![API Usage — webhook / self-heal mode](screenshots/api-usage-selfheal.png)
 
 ```
 API USAGE                                                   [▼]
@@ -207,13 +227,15 @@ Total elapsed from config change in Mist → back in spec: **~3 seconds.**
 
 ---
 
-## Adding screenshots
+## Still to capture
 
-To populate this document with real screenshots:
+Five more shots complete the story — the refs below are already in this file; dropping PNGs with these filenames in `docs/screenshots/` will light them up:
 
-1. Run the app locally or in your production Docker.
-2. Open DevTools → capture full-page screenshots of the screens above.
-3. Save each as a PNG in `docs/screenshots/` with the filename referenced above (e.g. `dashboard.png`).
-4. Commit both the docs and the screenshots.
+- `dashboard.png` — Dashboard with 4 stat tiles + site list (mix of healthy/drift)
+- `site-detail.png` — a site's detail page with one WLAN drifting (orange card) and expanded findings
+- `standards.png` — Standards list with WLAN + Site sections expanded, at least one Drift or Auto badge visible
+- `templates-drawer.png` — Templates drawer open on the WLAN tab with Performance group visible
+- `activity.png` — Activity page with stat tiles + a few incident rows (mix of Open / Resolved / Failed)
+- `debug-logs.png` — Debug Logs panel streaming live with a mix of INFO / WARNING / ERROR lines
 
-The image refs in this file use relative paths, so they render correctly on GitHub once the files are in place.
+Capture via Chrome DevTools (`Cmd/Ctrl+Shift+P` → "Capture full size screenshot"), save to `docs/screenshots/`, commit.
