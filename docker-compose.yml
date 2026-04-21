@@ -1,49 +1,41 @@
 services:
-  db:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_DB: mist_ca
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-      - ./supabase/migrations/001_init.sql:/docker-entrypoint-initdb.d/001_init.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d mist_ca"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   backend:
-    build: ./backend
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    restart: unless-stopped
     ports:
       - "8001:8001"
     environment:
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       CLERK_JWKS_URL: ${CLERK_JWKS_URL}
+      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
       APP_URL: ${APP_URL}
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
-      CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
-      ENABLE_DEBUG_LOGS: ${ENABLE_DEBUG_LOGS}
-    depends_on:
-      db:
-        condition: service_healthy
+      ENABLE_DEBUG_LOGS: ${ENABLE_DEBUG_LOGS:-false}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   frontend:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
+        NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL}
+    restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY: ${NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY}
       CLERK_SECRET_KEY: ${CLERK_SECRET_KEY}
       BACKEND_URL: http://backend:8001
     depends_on:
-      - backend
-
-volumes:
-  pgdata:
+      backend:
+        condition: service_healthy
