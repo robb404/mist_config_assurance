@@ -20,6 +20,20 @@ export interface OrgUsage {
   recommend_webhooks: boolean
 }
 
+export interface DigestSettings {
+  frequency: 'daily' | 'weekly' | null
+  extra_recipients: string[]
+  last_sent_at: string | null
+  last_error: string | null
+  resend_configured: boolean
+}
+
+export interface DigestTestResult {
+  ok: boolean
+  skipped: boolean
+  error: string | null
+}
+
 export interface Site {
   id: string
   org_id: string

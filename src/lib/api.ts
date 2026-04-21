@@ -20,6 +20,11 @@ export const api = {
 
   getOrgUsage: () => request<import('./types').OrgUsage>('api/org/usage'),
   setupWebhook: () => request<{ webhook_secret: string }>('api/org/webhook/setup', { method: 'POST' }),
+  getDigestSettings: () => request<import('./types').DigestSettings>('api/org/digest-settings'),
+  updateDigestSettings: (settings: { frequency: 'daily' | 'weekly' | null; extra_recipients: string[] }) =>
+    request('api/org/digest-settings', { method: 'PATCH', body: JSON.stringify(settings) }),
+  sendTestDigest: () =>
+    request<import('./types').DigestTestResult>('api/digest/test', { method: 'POST' }),
 
   listSites: () => request<{ sites: import('./types').Site[] }>('api/sites'),
   syncSites: () => request<{ synced: number }>('api/sites/sync', { method: 'POST' }),
