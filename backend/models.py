@@ -46,3 +46,8 @@ class AIConfigSave(BaseModel):
 
 class ParseFilterRequest(BaseModel):
     text: str
+
+
+class DigestSettingsRequest(BaseModel):
+    frequency: Literal["daily", "weekly"] | None = None
+    extra_recipients: list[str] = []

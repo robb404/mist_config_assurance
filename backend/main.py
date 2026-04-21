@@ -21,11 +21,12 @@ from .db import get_client
 from .engine import evaluate_site
 from .field_dict import get_field_dict, save_field_dict
 from .models import (
-    AIConfigSave, ConnectRequest, OrgSettingsRequest,
+    AIConfigSave, ConnectRequest, DigestSettingsRequest, OrgSettingsRequest,
     ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
 )
 from .remediation import apply_remediation
 from . import remediation
+from . import digest
 from .rate_limiter import (
     budget_summary, can_check, increment_calls, min_interval_mins, _reset_window_if_needed,
 )
@@ -38,7 +39,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(mess
 async def lifespan(app: FastAPI):
     sched.start()
     db = get_client()
-    orgs = db.table("org_config").select("org_id,drift_interval_mins,mode").execute()
+    orgs = db.table("org_config").select("org_id,drift_interval_mins,mode,digest_frequency").execute()
     for org in (orgs.data or []):
         sched.upsert_org_job(
             org["org_id"],
@@ -46,6 +47,7 @@ async def lifespan(app: FastAPI):
             run_drift_for_org,
             mode=org.get("mode", "polling"),
         )
+        digest.register_digest_job(org["org_id"], org.get("digest_frequency"))
     yield
     sched.stop()
 
@@ -148,6 +150,41 @@ async def setup_webhook(org_id: str = Depends(get_org_id)):
     db.table("org_config").update({"webhook_secret": encrypt(secret)}) \
         .eq("org_id", org_id).execute()
     return {"webhook_secret": secret}
+
+
+@app.get("/api/org/digest-settings")
+async def get_digest_settings(org_id: str = Depends(get_org_id)):
+    db = get_client()
+    row = db.table("org_config").select(
+        "digest_frequency,digest_extra_recipients,digest_last_sent_at,digest_last_error"
+    ).eq("org_id", org_id).maybe_single().execute()
+    if not row.data:
+        raise HTTPException(404, "Org not configured")
+    return {
+        "frequency": row.data.get("digest_frequency"),
+        "extra_recipients": row.data.get("digest_extra_recipients") or [],
+        "last_sent_at": row.data.get("digest_last_sent_at"),
+        "last_error": row.data.get("digest_last_error"),
+        "resend_configured": bool(os.environ.get("RESEND_API_KEY") and os.environ.get("RESEND_FROM_EMAIL")),
+    }
+
+
+@app.patch("/api/org/digest-settings")
+async def update_digest_settings(req: DigestSettingsRequest, org_id: str = Depends(get_org_id)):
+    _get_org_or_404(org_id)
+    db = get_client()
+    db.table("org_config").update({
+        "digest_frequency": req.frequency,
+        "digest_extra_recipients": req.extra_recipients,
+    }).eq("org_id", org_id).execute()
+    digest.register_digest_job(org_id, req.frequency)
+    return {"ok": True}
+
+
+@app.post("/api/digest/test")
+async def send_test_digest(org_id: str = Depends(get_org_id)):
+    result = await digest.send_digest(org_id, trigger_source="manual")
+    return result
 
 
 @app.post("/api/webhooks/mist/{org_id}", status_code=200)
