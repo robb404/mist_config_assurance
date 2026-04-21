@@ -34,6 +34,19 @@ export interface DigestTestResult {
   error: string | null
 }
 
+export interface DebugLogEntry {
+  id: number
+  timestamp: number
+  level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'
+  logger: string
+  message: string
+}
+
+export interface DebugLogPage {
+  entries: DebugLogEntry[]
+  last_id: number
+}
+
 export interface Site {
   id: string
   org_id: string

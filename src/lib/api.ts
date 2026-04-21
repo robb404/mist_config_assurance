@@ -72,4 +72,8 @@ export const api = {
     ),
   getFields: () => request<import('./types').FieldDict>('api/fields'),
   getRftemplates: () => request<import('./types').RfTemplate[]>('api/rftemplates'),
+
+  getDebugStatus: () => request<{ enabled: boolean }>('api/debug/status'),
+  getDebugLogs: (since: number, minLevel: string) =>
+    request<import('./types').DebugLogPage>(`api/debug/logs?since=${since}&min_level=${minLevel}`),
 }

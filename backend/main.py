@@ -29,6 +29,7 @@ from .models import (
     ParseFilterRequest, RunRequest, StandardCreate, StandardUpdate,
 )
 from .remediation import apply_remediation
+from . import debug_logs
 from . import remediation
 from . import digest
 from .rate_limiter import (
@@ -37,6 +38,7 @@ from .rate_limiter import (
 
 log = logging.getLogger("mist_ca")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+debug_logs.install()
 
 
 @asynccontextmanager
@@ -552,6 +554,33 @@ async def get_raw_wlans(site_id: str, org_id: str = Depends(get_org_id)):
 @app.get("/health")
 async def health():
     return {"status": "ok", "scheduler_running": sched.scheduler.running}
+
+
+# ---------------------------------------------------------------------------
+# Debug logs (gated by ENABLE_DEBUG_LOGS env var)
+# ---------------------------------------------------------------------------
+
+@app.get("/api/debug/status")
+async def debug_status(_: str = Depends(get_org_id)):
+    return {"enabled": debug_logs.is_enabled()}
+
+
+@app.get("/api/debug/logs")
+async def debug_log_entries(
+    since: int = 0,
+    min_level: str = "INFO",
+    _: str = Depends(get_org_id),
+):
+    if not debug_logs.is_enabled():
+        raise HTTPException(403, "Debug logs are not enabled on this server")
+    handler = debug_logs.get_handler()
+    if handler is None:
+        return {"entries": [], "last_id": since}
+    entries = handler.read_since(since, min_level=min_level)
+    return {
+        "entries": entries,
+        "last_id": entries[-1]["id"] if entries else since,
+    }
 
 
 # ---------------------------------------------------------------------------

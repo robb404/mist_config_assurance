@@ -55,6 +55,7 @@
   /* Legacy aliases (will be pruned when callsites are updated) */
   --color-surface-lowest: #FFFFFF;
   --color-surface-low: #F1F5F9;
+  --color-surface-base: #EBEEF0;
   --color-surface-high: #E2E8F0;
   --color-surface-highest: #CBD5E1;
   --color-danger: #BA1A1A;

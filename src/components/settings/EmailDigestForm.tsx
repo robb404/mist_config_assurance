@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import type { DigestSettings, DigestTestResult } from '@/lib/types'
+import { CollapsibleSection } from './CollapsibleSection'
 
 const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
 const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30 focus:outline-primary'
@@ -70,11 +71,7 @@ export function EmailDigestForm() {
   const testEnabled = frequency !== null && settings.resend_configured
 
   return (
-    <section className="bg-surface-lowest rounded-lg p-6">
-      <h2 className="font-display text-sm font-semibold text-primary uppercase tracking-wide mb-4">
-        Email Digest
-      </h2>
-
+    <CollapsibleSection title="Email Digest">
       {!settings.resend_configured && (
         <div className="text-xs text-warning bg-warning/10 rounded-lg px-3 py-2 mb-4">
           Resend is not configured on the backend. Set <code>RESEND_API_KEY</code> and <code>RESEND_FROM_EMAIL</code> to enable.
@@ -148,6 +145,6 @@ export function EmailDigestForm() {
           )}
         </div>
       </form>
-    </section>
+    </CollapsibleSection>
   )
 }

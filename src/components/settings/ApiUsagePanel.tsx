@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react'
 import { api } from '@/lib/api'
 import type { OrgUsage } from '@/lib/types'
+import { CollapsibleSection } from './CollapsibleSection'
 
 const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
 const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30'
@@ -43,10 +44,8 @@ export function ApiUsagePanel() {
   const checkPct  = Math.min(100, Math.round(usage.calls_per_hour / 5000 * 100))
 
   return (
-    <section className="bg-surface-lowest rounded-lg p-6 space-y-5">
-      <h2 className="font-display text-sm font-semibold text-primary uppercase tracking-wide">
-        API Usage
-      </h2>
+    <CollapsibleSection title="API Usage">
+      <div className="space-y-5">
 
       {/* Live counter */}
       <div>
@@ -175,6 +174,7 @@ export function ApiUsagePanel() {
           {error && <p className="text-xs text-danger">{error}</p>}
         </div>
       )}
-    </section>
+      </div>
+    </CollapsibleSection>
   )
 }

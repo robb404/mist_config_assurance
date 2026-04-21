@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react'
 import type { AIConfig } from '@/lib/types'
 import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
+import { CollapsibleSection } from './CollapsibleSection'
 
 const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline outline-1 outline-surface-highest/30 focus:outline-primary'
 const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
@@ -57,16 +58,12 @@ export function AIProviderForm() {
   }
 
   return (
-    <section className="bg-surface-lowest rounded-lg p-6">
-      <h2 className="font-display text-sm font-semibold text-primary uppercase tracking-wide mb-4">
-        AI Provider
-        {config?.configured && (
-          <span className="text-healthy ml-2 normal-case font-normal">
-            ✓ {config.provider} / {config.model}
-          </span>
-        )}
-      </h2>
-
+    <CollapsibleSection
+      title="AI Provider"
+      adornment={config?.configured
+        ? <span className="text-xs text-healthy font-medium normal-case tracking-normal">✓ {config.provider} / {config.model}</span>
+        : null}
+    >
       <form onSubmit={save} className="space-y-4">
         <div>
           <label className={labelCls}>Provider</label>
@@ -146,6 +143,6 @@ export function AIProviderForm() {
       </form>
 
       {msg && <p className="text-sm text-on-surface/70 mt-3">{msg}</p>}
-    </section>
+    </CollapsibleSection>
   )
 }
