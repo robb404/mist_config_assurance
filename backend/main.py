@@ -91,7 +91,28 @@ async def connect(
         "mist_org_id": info["org_id"],
         "owner_user_id": user_id,
     }).execute()
-    return {"org_name": info["org_name"], "mist_org_id": info["org_id"]}
+
+    # Auto-sync sites so the Dashboard is populated immediately after connect.
+    # Soft-fail: a sync error shouldn't block the successful connection.
+    synced = 0
+    try:
+        sites = await mist.get_sites(req.mist_token, base_url, info["org_id"])
+        for s in sites:
+            db.table("site").upsert(
+                {"id": s["id"], "org_id": org_id, "name": s["name"]},
+                on_conflict="id,org_id",
+            ).execute()
+        synced = len(sites)
+        increment_calls(org_id, n=2)  # get_org_info + get_sites
+        log.info("auto-sync on connect: org=%s synced=%d sites", org_id, synced)
+    except Exception as exc:
+        log.warning("auto-sync on connect failed for org=%s: %s", org_id, exc)
+
+    return {
+        "org_name": info["org_name"],
+        "mist_org_id": info["org_id"],
+        "sites_synced": synced,
+    }
 
 
 @app.get("/api/org")
