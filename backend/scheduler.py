@@ -50,13 +50,15 @@ def upsert_org_job(org_id: str, interval_mins: int, drift_fn, mode: Literal["pol
         log.info("Webhook mode: daily scan registered for org=%s at 02:00 UTC", org_id)
 
     elif interval_mins > 0:
+        # Grace scales with interval — at long intervals, a dropped cycle is costly.
+        grace = max(60, interval_mins * 6)
         scheduler.add_job(
             drift_fn,
             trigger=IntervalTrigger(minutes=interval_mins),
             id=polling_job_id,
             kwargs={"org_id": org_id},
             replace_existing=True,
-            misfire_grace_time=60,
+            misfire_grace_time=grace,
             max_instances=1,
         )
         log.info("Polling mode: drift scheduled for org=%s every %d mins", org_id, interval_mins)

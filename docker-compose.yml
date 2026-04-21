@@ -25,6 +25,7 @@ services:
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
       CLERK_JWKS_URL: ${CLERK_JWKS_URL}
       TOKEN_ENCRYPTION_KEY: ${TOKEN_ENCRYPTION_KEY}
+      APP_URL: ${APP_URL}
     depends_on:
       db:
         condition: service_healthy
