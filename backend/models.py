@@ -12,6 +12,7 @@ class ConnectRequest(BaseModel):
 class OrgSettingsRequest(BaseModel):
     drift_interval_mins: int = 0
     auto_remediate: bool = False
+    mode: Literal["polling", "webhook"] = "polling"
 
 
 class StandardCreate(BaseModel):
