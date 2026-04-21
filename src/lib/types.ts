@@ -4,6 +4,20 @@ export interface OrgConfig {
   cloud_endpoint: string
   drift_interval_mins: number
   auto_remediate: boolean
+  mode: 'polling' | 'webhook'
+}
+
+export interface OrgUsage {
+  mode: 'polling' | 'webhook'
+  calls_used_this_hour: number
+  calls_window_start: string | null
+  site_count: number
+  webhook_url: string | null
+  webhook_configured: boolean
+  calls_per_hour: number
+  min_interval_mins: number
+  interval_safe: boolean
+  recommend_webhooks: boolean
 }
 
 export interface Site {
@@ -12,6 +26,7 @@ export interface Site {
   name: string
   monitored: boolean
   last_checked_at: string | null
+  check_error: string | null
 }
 
 export interface Standard {

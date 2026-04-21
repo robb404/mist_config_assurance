@@ -15,8 +15,11 @@ export const api = {
   getOrg: () => request<import('./types').OrgConfig>('api/org'),
   connect: (mist_token: string, cloud_endpoint: string, mist_org_id?: string) =>
     request('api/org/connect', { method: 'POST', body: JSON.stringify({ mist_token, cloud_endpoint, mist_org_id: mist_org_id || undefined }) }),
-  updateSettings: (settings: { drift_interval_mins: number; auto_remediate: boolean }) =>
+  updateSettings: (settings: { drift_interval_mins: number; auto_remediate: boolean; mode: 'polling' | 'webhook' }) =>
     request('api/org/settings', { method: 'PATCH', body: JSON.stringify(settings) }),
+
+  getOrgUsage: () => request<import('./types').OrgUsage>('api/org/usage'),
+  setupWebhook: () => request<{ webhook_secret: string }>('api/org/webhook/setup', { method: 'POST' }),
 
   listSites: () => request<{ sites: import('./types').Site[] }>('api/sites'),
   syncSites: () => request<{ synced: number }>('api/sites/sync', { method: 'POST' }),
