@@ -6,12 +6,16 @@ export interface TemplateCard {
   key: string
   title: string
   description: string
-  /** Present on dropdown and dynamic cards; absent on simple cards. */
+  /** Present on dropdown and multi-select cards; absent on simple cards. */
   options?: { label: string; value: string }[]
   /** If 'rftemplates', caller must populate options from GET /api/rftemplates. */
   dynamicOptions?: 'rftemplates'
-  /** Returns the standards to create. Simple cards ignore selectedValue. */
-  getStandards: (selectedValue?: string) => BaseStd[]
+  /** When true, renders checkboxes instead of a dropdown. Caller passes string[]. */
+  multiSelect?: boolean
+  /** Default checked values for multi-select cards. */
+  multiSelectDefault?: string[]
+  /** Returns the standards to create. Multi-select cards receive string[]. */
+  getStandards: (selectedValue?: string | string[]) => BaseStd[]
   /** Returns true if this template is already represented in the loaded standards list. */
   isAdded: (standards: Standard[]) => boolean
 }
@@ -62,25 +66,27 @@ export const TABS: TabConfig[] = [
           {
             key: 'data_rates',
             title: 'Data Rates',
-            description: 'Enforce a rate template on 2.4, 5, and 6 GHz (creates 3 standards).',
+            description: 'Enforce a rate template across 2.4, 5, and 6 GHz. Remediation sets all three bands at once.',
             options: [
               { label: 'No Legacy', value: 'no-legacy' },
               { label: 'High Density', value: 'high-density' },
               { label: 'Compatible', value: 'compatible' },
             ],
-            getStandards: (val = 'no-legacy') =>
-              ['24', '5', '6'].map(band => ({
-                ...W,
-                name: `Data Rates — ${band === '24' ? '2.4' : band} GHz (${val})`,
-                description: `Set ${band === '24' ? '2.4' : band} GHz rate template to ${val}.`,
-                check_field: `rateset.${band}.template`,
-                check_condition: 'eq',
-                check_value: val,
-                remediation_field: `rateset.${band}.template`,
-                remediation_value: val,
-              })),
-            isAdded: (stds) =>
-              ['24', '5', '6'].every(b => stds.some(s => s.check_field === `rateset.${b}.template`)),
+            getStandards: (val = 'no-legacy') => [{
+              ...W,
+              name: `Data Rates (${val})`,
+              description: `Enforce the ${val} rate template across 2.4, 5, and 6 GHz.`,
+              check_field: 'rateset.5.template',
+              check_condition: 'eq',
+              check_value: val,
+              remediation_field: 'rateset',
+              remediation_value: {
+                '5':  { template: val, min_rssi: 0 },
+                '6':  { template: val, min_rssi: 0 },
+                '24': { template: val, min_rssi: 0 },
+              },
+            }],
+            isAdded: (stds) => stds.some(s => s.check_field === 'rateset.5.template'),
           },
           {
             key: 'wifi7',
@@ -111,46 +117,30 @@ export const TABS: TabConfig[] = [
         label: 'Radio Band',
         templates: [
           {
-            key: 'band_24',
-            title: 'Radio Band — 2.4 GHz',
-            description: 'Require WLANs to broadcast on 2.4 GHz.',
-            getStandards: () => [{
-              ...W,
-              name: 'Radio Band — 2.4 GHz',
-              description: 'Ensure WLANs are configured to broadcast on 2.4 GHz.',
-              check_field: 'bands', check_condition: 'contains_item', check_value: '24',
-              remediation_field: 'bands', remediation_value: ['24'],
-            }],
-            isAdded: (stds) =>
-              stds.some(s => s.check_field === 'bands' && s.check_value === '24'),
-          },
-          {
-            key: 'band_5',
-            title: 'Radio Band — 5 GHz',
-            description: 'Require WLANs to broadcast on 5 GHz.',
-            getStandards: () => [{
-              ...W,
-              name: 'Radio Band — 5 GHz',
-              description: 'Ensure WLANs are configured to broadcast on 5 GHz.',
-              check_field: 'bands', check_condition: 'contains_item', check_value: '5',
-              remediation_field: 'bands', remediation_value: ['5'],
-            }],
-            isAdded: (stds) =>
-              stds.some(s => s.check_field === 'bands' && s.check_value === '5'),
-          },
-          {
-            key: 'band_6',
-            title: 'Radio Band — 6 GHz',
-            description: 'Require WLANs to broadcast on 6 GHz.',
-            getStandards: () => [{
-              ...W,
-              name: 'Radio Band — 6 GHz',
-              description: 'Ensure WLANs are configured to broadcast on 6 GHz.',
-              check_field: 'bands', check_condition: 'contains_item', check_value: '6',
-              remediation_field: 'bands', remediation_value: ['6'],
-            }],
-            isAdded: (stds) =>
-              stds.some(s => s.check_field === 'bands' && s.check_value === '6'),
+            key: 'radio_band',
+            title: 'Radio Band',
+            description: 'Enforce which bands WLANs must broadcast on. Remediation replaces the bands list entirely.',
+            options: [
+              { label: '2.4 GHz', value: '24' },
+              { label: '5 GHz',   value: '5'  },
+              { label: '6 GHz',   value: '6'  },
+            ],
+            multiSelect: true,
+            multiSelectDefault: ['24', '5', '6'],
+            getStandards: (selected) => {
+              const bands = (Array.isArray(selected) ? selected : selected ? [selected] : [])
+                .slice().sort()
+              if (bands.length === 0) return []
+              const label = bands.map(b => b === '24' ? '2.4 GHz' : b === '5' ? '5 GHz' : '6 GHz').join(' + ')
+              return [{
+                ...W,
+                name: `Radio Band — ${label}`,
+                description: `Ensure WLANs broadcast on ${label} only.`,
+                check_field: 'bands', check_condition: 'set_eq', check_value: bands,
+                remediation_field: 'bands', remediation_value: bands,
+              }]
+            },
+            isAdded: (stds) => stds.some(s => s.check_field === 'bands'),
           },
         ],
       },
@@ -244,36 +234,18 @@ export const TABS: TabConfig[] = [
             }],
             isAdded: (stds) => stds.some(s => s.check_field === 'persist_config_on_device'),
           },
-        ],
-      },
-      {
-        label: 'Security',
-        templates: [
           {
-            key: 'switch_root_pw',
-            title: 'Switch Mgmt Root Password',
-            description: 'Ensure a root password is set on managed switches. Checks password is set — value not verified.',
+            key: 'uplink_monitoring',
+            title: 'AP Uplink Monitoring',
+            description: 'Keep WLANs up if the AP uplink goes down.',
             getStandards: () => [{
               ...S,
-              name: 'Switch Mgmt Root Password',
-              description: 'Ensure managed switches have a root password configured. Password value cannot be verified.',
-              check_field: 'switch_mgmt.root_password', check_condition: 'truthy', check_value: null,
-              remediation_field: 'switch_mgmt.root_password', remediation_value: null,
+              name: 'AP Uplink Monitoring',
+              description: 'Ensure keep_wlans_up_if_down is false (enabled) so WLANs stay active when the AP uplink port loses connectivity.',
+              check_field: 'uplink_port_config.keep_wlans_up_if_down', check_condition: 'falsy', check_value: null,
+              remediation_field: 'uplink_port_config.keep_wlans_up_if_down', remediation_value: false,
             }],
-            isAdded: (stds) => stds.some(s => s.check_field === 'switch_mgmt.root_password'),
-          },
-          {
-            key: 'wan_root_pw',
-            title: 'WAN Edge Root Password',
-            description: 'Ensure a root password is set on WAN edge devices. Checks password is set — value not verified.',
-            getStandards: () => [{
-              ...S,
-              name: 'WAN Edge Root Password',
-              description: 'Ensure WAN edge devices have a root password configured. Password value cannot be verified.',
-              check_field: 'gateway_mgmt.root_password', check_condition: 'truthy', check_value: null,
-              remediation_field: 'gateway_mgmt.root_password', remediation_value: null,
-            }],
-            isAdded: (stds) => stds.some(s => s.check_field === 'gateway_mgmt.root_password'),
+            isAdded: (stds) => stds.some(s => s.check_field === 'uplink_port_config.keep_wlans_up_if_down'),
           },
         ],
       },

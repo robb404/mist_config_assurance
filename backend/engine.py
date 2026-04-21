@@ -13,12 +13,14 @@ def _resolve(obj: dict, path: str) -> Any:
 def _eval_condition(value: Any, condition: str, spec: dict) -> bool | None:
     if condition == "falsy":
         return not bool(value)
-    if value is None:
-        return None
     expected = spec.get("value") if "value" in spec else spec.get("values")
-    if condition == "truthy":     return bool(value)
+    # eq/ne have a definitive answer even when the field is absent:
+    # "is roam_mode eq 11r?" — if the field doesn't exist the answer is No (fail).
     if condition == "eq":         return value == expected
     if condition == "ne":         return value != expected
+    if value is None:
+        return None
+    if condition == "truthy":     return bool(value)
     if condition == "in":         return value in (expected or [])
     if condition == "not_in":     return value not in (expected or [])
     if condition == "contains":   return str(expected or "").lower() in str(value).lower()
@@ -27,6 +29,10 @@ def _eval_condition(value: Any, condition: str, spec: dict) -> bool | None:
         return expected in value if isinstance(value, list) else None
     if condition == "not_contains_item":
         return expected not in value if isinstance(value, list) else None
+    if condition == "set_eq":
+        if not isinstance(value, list) or not isinstance(expected, list):
+            return None
+        return sorted(str(x) for x in value) == sorted(str(x) for x in expected)
     if condition == "gte":
         try: return float(value) >= float(expected)
         except (TypeError, ValueError): return None

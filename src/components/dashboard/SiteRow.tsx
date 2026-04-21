@@ -35,6 +35,14 @@ export function SiteRow({ site, failed, passed, onRunComplete }: Props) {
             {new Date(site.last_checked_at).toLocaleString()}
           </span>
         )}
+        {site.check_error && (
+          <span
+            title={site.check_error}
+            className="text-xs text-drift font-medium cursor-help"
+          >
+            Check failed ⚠
+          </span>
+        )}
       </div>
       <Button variant="secondary" size="sm" onClick={runCheck} disabled={running}>
         {running ? 'Running…' : 'Run Check'}

@@ -14,6 +14,7 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
   const [open, setOpen] = useState(false)
   const [activeTab, setActiveTab] = useState<'wlan' | 'site'>('wlan')
   const [selections, setSelections] = useState<Record<string, string>>({})
+  const [multiSelections, setMultiSelections] = useState<Record<string, string[]>>({})
   const [adding, setAdding] = useState<Set<string>>(new Set())
   const [rfTemplates, setRfTemplates] = useState<RfTemplate[]>([])
   const [rfTemplatesLoaded, setRfTemplatesLoaded] = useState(false)
@@ -27,7 +28,7 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
     }
   }, [open, activeTab, rfTemplatesLoaded])
 
-  async function addTemplate(card: TemplateCard, selectedValue?: string) {
+  async function addTemplate(card: TemplateCard, selectedValue?: string | string[]) {
     const toCreate = card.getStandards(selectedValue)
     if (toCreate.length === 0) return
     setAdding(prev => new Set(prev).add(card.key))
@@ -88,22 +89,50 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
                     const alreadyAdded = card.isAdded(standards)
                     const isAdding = adding.has(card.key)
                     const hasOptions = card.options !== undefined
+                    const isMulti = card.multiSelect === true
                     const isDynamic = card.dynamicOptions === 'rftemplates'
                     const effectiveOptions = isDynamic
                       ? rfTemplates.map(t => ({ label: t.name, value: t.id }))
                       : (card.options ?? [])
-                    const defaultVal = effectiveOptions[0]?.value
-                    const selectedVal = selections[card.key] ?? defaultVal
+                    const selectedVal = selections[card.key] ?? ''
+                    const selectedBands = multiSelections[card.key] ?? (card.multiSelectDefault ?? [])
                     const canAdd = !alreadyAdded && !isAdding &&
-                      (!hasOptions || effectiveOptions.length > 0) &&
-                      !(isDynamic && rfError)
+                      (!hasOptions || (effectiveOptions.length > 0 && (!isDynamic || selectedVal !== ''))) &&
+                      !(isDynamic && rfError) &&
+                      (!isMulti || selectedBands.length > 0)
 
                     return (
                       <div key={card.key} className="bg-surface-lowest rounded-lg p-3 flex flex-col">
                         <p className="text-sm font-semibold text-on-surface mb-1">{card.title}</p>
                         <p className="text-xs text-on-surface/50 mb-3 flex-1">{card.description}</p>
 
-                        {hasOptions && (
+                        {hasOptions && isMulti && (
+                          <div className="mb-2 flex flex-col gap-1.5">
+                            {effectiveOptions.map(opt => (
+                              <label key={opt.value} className="flex items-center gap-2 text-xs text-on-surface cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  disabled={alreadyAdded}
+                                  checked={selectedBands.includes(opt.value)}
+                                  onChange={e => {
+                                    setMultiSelections(prev => {
+                                      const cur = prev[card.key] ?? (card.multiSelectDefault ?? [])
+                                      return {
+                                        ...prev,
+                                        [card.key]: e.target.checked
+                                          ? [...cur, opt.value]
+                                          : cur.filter(v => v !== opt.value),
+                                      }
+                                    })
+                                  }}
+                                />
+                                {opt.label}
+                              </label>
+                            ))}
+                          </div>
+                        )}
+
+                        {hasOptions && !isMulti && (
                           <div className="mb-2">
                             {isDynamic && rfError ? (
                               <p className="text-xs text-on-surface/40 italic">Unable to load templates</p>
@@ -113,13 +142,14 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
                               </p>
                             ) : (
                               <select
-                                value={selectedVal ?? ''}
+                                value={selectedVal}
                                 disabled={alreadyAdded}
                                 onChange={e =>
                                   setSelections(prev => ({ ...prev, [card.key]: e.target.value }))
                                 }
                                 className="w-full text-xs bg-surface border border-border rounded px-2 py-1 text-on-surface"
                               >
+                                {isDynamic && <option value="" disabled>Select a template…</option>}
                                 {effectiveOptions.map(opt => (
                                   <option key={opt.value} value={opt.value}>{opt.label}</option>
                                 ))}
@@ -135,7 +165,7 @@ export function TemplateLibrary({ standards, onAdded }: Props) {
                         ) : (
                           <button
                             disabled={!canAdd}
-                            onClick={() => addTemplate(card, selectedVal)}
+                            onClick={() => addTemplate(card, isMulti ? selectedBands : selectedVal)}
                             className={`text-xs font-medium px-3 py-1.5 rounded-lg transition-colors self-start ${
                               canAdd
                                 ? 'bg-primary/10 text-primary hover:bg-primary/20'

@@ -101,6 +101,26 @@ async def patch_org_wlan(token: str, base_url: str, mist_org_id: str, wlan_id: s
         return resp.is_success
 
 
+async def get_site(token: str, base_url: str, site_id: str) -> dict:
+    """Return the site entity (includes rftemplate_id, aptemplate_id, etc.)."""
+    async with httpx.AsyncClient(verify=False) as client:
+        resp = await client.get(
+            f"{base_url}sites/{site_id}",
+            headers=_headers(token), timeout=TIMEOUT,
+        )
+        return resp.json() if resp.is_success else {}
+
+
+async def patch_site(token: str, base_url: str, site_id: str, payload: dict) -> bool:
+    """Update the site entity (rftemplate_id, aptemplate_id, etc.) via PUT sites/:id."""
+    async with httpx.AsyncClient(verify=False) as client:
+        resp = await client.put(
+            f"{base_url}sites/{site_id}",
+            json=payload, headers=_headers(token), timeout=TIMEOUT,
+        )
+        return resp.is_success
+
+
 async def patch_site_setting(token: str, base_url: str, site_id: str, payload: dict) -> bool:
     async with httpx.AsyncClient(verify=False) as client:
         resp = await client.put(

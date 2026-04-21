@@ -64,6 +64,47 @@ def test_no_wlans_returns_skip_for_wlan_scope():
 
 
 # ---------------------------------------------------------------------------
+# set_eq condition tests (Radio Band)
+# ---------------------------------------------------------------------------
+
+def _band_std(expected_bands):
+    return [{"id": "b1", "name": "Bands", "scope": "wlan", "enabled": True,
+              "check_field": "bands", "check_condition": "set_eq",
+              "check_value": expected_bands, "filter": None}]
+
+
+def test_set_eq_exact_match_pass():
+    wlan = {"id": "w1", "ssid": "Net", "bands": ["24", "5"]}
+    findings = evaluate_site("s", "S", [wlan], {}, _band_std(["24", "5"]))
+    assert findings[0]["status"] == "pass"
+
+
+def test_set_eq_order_insensitive_pass():
+    # Mist may return bands in any order — set_eq must ignore order
+    wlan = {"id": "w1", "ssid": "Net", "bands": ["5", "24"]}
+    findings = evaluate_site("s", "S", [wlan], {}, _band_std(["24", "5"]))
+    assert findings[0]["status"] == "pass"
+
+
+def test_set_eq_missing_band_fail():
+    wlan = {"id": "w1", "ssid": "Net", "bands": ["24"]}
+    findings = evaluate_site("s", "S", [wlan], {}, _band_std(["24", "5"]))
+    assert findings[0]["status"] == "fail"
+
+
+def test_set_eq_extra_band_fail():
+    wlan = {"id": "w1", "ssid": "Net", "bands": ["24", "5", "6"]}
+    findings = evaluate_site("s", "S", [wlan], {}, _band_std(["24", "5"]))
+    assert findings[0]["status"] == "fail"
+
+
+def test_set_eq_non_list_field_skip():
+    wlan = {"id": "w1", "ssid": "Net", "bands": "24"}
+    findings = evaluate_site("s", "S", [wlan], {}, _band_std(["24"]))
+    assert findings[0]["status"] == "skip"
+
+
+# ---------------------------------------------------------------------------
 # Fast Roaming (802.11r) filter tests
 # ---------------------------------------------------------------------------
 
@@ -132,3 +173,48 @@ def test_fast_roaming_mixed_site():
     assert by_wlan["w1"] == "fail"
     assert by_wlan["w2"] == "pass"
     assert by_wlan["w3"] == "skip"
+
+
+def test_fast_roaming_absent_field_is_fail():
+    # Org WLANs often omit roam_mode entirely when not set.
+    # eq with absent field must return False (fail), not None (skip).
+    wlan = {"id": "w1", "ssid": "Corp", "auth": {"type": "psk"}}
+    findings = evaluate_site("s", "S", [wlan], {}, FAST_ROAMING_STD)
+    assert findings[0]["status"] == "fail"
+
+
+# ---------------------------------------------------------------------------
+# eq / ne with absent field (None value)
+# ---------------------------------------------------------------------------
+
+def _eq_std(field, expected):
+    return [{"id": "e1", "name": "EqTest", "scope": "wlan", "enabled": True,
+              "check_field": field, "check_condition": "eq",
+              "check_value": expected, "filter": None}]
+
+
+def _ne_std(field, expected):
+    return [{"id": "e1", "name": "NeTest", "scope": "wlan", "enabled": True,
+              "check_field": field, "check_condition": "ne",
+              "check_value": expected, "filter": None}]
+
+
+def test_eq_absent_field_is_fail():
+    # Field not present → value is None → None == "11r" is False → fail
+    wlan = {"id": "w1", "ssid": "Net"}
+    findings = evaluate_site("s", "S", [wlan], {}, _eq_std("roam_mode", "11r"))
+    assert findings[0]["status"] == "fail"
+
+
+def test_eq_null_value_matches_none():
+    # If the spec expects None (check_value omitted/null) and field is absent, eq matches
+    wlan = {"id": "w1", "ssid": "Net"}
+    findings = evaluate_site("s", "S", [wlan], {}, _eq_std("roam_mode", None))
+    assert findings[0]["status"] == "pass"
+
+
+def test_ne_absent_field_is_pass():
+    # Field not present → value is None → None != "11r" is True → pass
+    wlan = {"id": "w1", "ssid": "Net"}
+    findings = evaluate_site("s", "S", [wlan], {}, _ne_std("roam_mode", "11r"))
+    assert findings[0]["status"] == "pass"
