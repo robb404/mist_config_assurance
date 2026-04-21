@@ -28,6 +28,7 @@ export function OrgSetupForm() {
   const [orgId, setOrgId]       = useState('')
   const [interval, setInterval] = useState(0)
   const [autoRemediate, setAutoRemediate] = useState(false)
+  const [mode, setMode] = useState<'polling' | 'webhook'>('polling')
   const [org, setOrg]           = useState<OrgConfig | null>(null)
   const [saving, setSaving]     = useState(false)
   const [msg, setMsg]           = useState('')
@@ -37,6 +38,7 @@ export function OrgSetupForm() {
       setOrg(data)
       setInterval((data as OrgConfig & { drift_interval_mins?: number }).drift_interval_mins ?? 0)
       setAutoRemediate((data as OrgConfig & { auto_remediate?: boolean }).auto_remediate ?? false)
+      setMode((data as OrgConfig).mode ?? 'polling')
     }).catch(() => {})
   }, [])
 
@@ -54,7 +56,7 @@ export function OrgSetupForm() {
   async function saveSettings(e: React.FormEvent) {
     e.preventDefault(); setSaving(true); setMsg('')
     try {
-      await api.updateSettings({ drift_interval_mins: interval, auto_remediate: autoRemediate })
+      await api.updateSettings({ drift_interval_mins: interval, auto_remediate: autoRemediate, mode })
       setMsg('Settings saved.')
     } catch (err: unknown) {
       setMsg(`Error: ${err instanceof Error ? err.message : 'Save failed'}`)
@@ -103,6 +105,35 @@ export function OrgSetupForm() {
             </label>
             <input type="number" min={0} value={interval} onChange={e => setInterval(Number(e.target.value))}
               className={inputCls} />
+          </div>
+          <div>
+            <label className={labelCls}>Detection Mode</label>
+            <div className="flex gap-3">
+              {(['polling', 'webhook'] as const).map(m => (
+                <button
+                  key={m}
+                  type="button"
+                  onClick={() => setMode(m)}
+                  className={`text-xs px-3 py-1.5 rounded-lg font-medium border transition-colors ${
+                    mode === m
+                      ? 'bg-primary text-white border-primary'
+                      : 'bg-surface border-border text-on-surface/60 hover:text-on-surface'
+                  }`}
+                >
+                  {m === 'polling' ? 'Polling' : 'Webhook'}
+                </button>
+              ))}
+            </div>
+            {mode === 'polling' && (
+              <p className="text-xs text-on-surface/50 mt-1">
+                Mist API is polled on the interval below.
+              </p>
+            )}
+            {mode === 'webhook' && (
+              <p className="text-xs text-on-surface/50 mt-1">
+                Mist pushes config changes to your webhook URL. See API Usage panel below.
+              </p>
+            )}
           </div>
           <div className="flex items-center gap-3">
             <button type="button" onClick={() => setAutoRemediate(v => !v)}
