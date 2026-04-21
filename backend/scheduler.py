@@ -1,4 +1,6 @@
 import logging
+from typing import Literal
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
@@ -18,7 +20,7 @@ def stop():
         scheduler.shutdown(wait=False)
 
 
-def upsert_org_job(org_id: str, interval_mins: int, drift_fn, mode: str = "polling"):
+def upsert_org_job(org_id: str, interval_mins: int, drift_fn, mode: Literal["polling", "webhook"] = "polling"):
     """
     Register or update the drift job for an org.
 
