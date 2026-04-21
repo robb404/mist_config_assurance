@@ -3,32 +3,63 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --background: #f7fafc;
+  --foreground: #181c1e;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* Brand colours */
-  --color-primary: #041627;
-  --color-primary-container: #1A2B3C;
+  /* Surfaces (Material-3 style tonal hierarchy) */
   --color-surface: #F7FAFC;
-  --color-surface-lowest: #FFFFFF;
-  --color-surface-low: #F0F4F8;
-  --color-surface-base: #E8EDF2;
-  --color-surface-high: #DCE3EA;
-  --color-surface-highest: #CBD5E0;
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-container-low: #F1F5F9;
+  --color-surface-container: #EBEEF0;
+  --color-surface-container-high: #E2E8F0;
+  --color-surface-container-highest: #CBD5E1;
+
+  /* Text on surfaces */
   --color-on-surface: #181C1E;
+  --color-on-surface-variant: #44474C;
+  --color-inverse-surface: #2D3133;
+  --color-inverse-on-surface: #EEF1F3;
+  --color-outline: #74777D;
+  --color-outline-variant: rgba(4, 22, 39, 0.20);
+
+  /* Primary (deep navy — anchors Signature Gradient) */
+  --color-primary: #041627;
   --color-on-primary: #FFFFFF;
-  --color-error: #BA1A1A;
-  --color-error-container: #FFDAD6;
+  --color-primary-container: #1A2B3C;
+  --color-on-primary-container: #74859B;
+
+  /* Secondary (subdued blue-grey) */
+  --color-secondary: #4F6073;
+  --color-on-secondary: #FFFFFF;
+  --color-secondary-container: #D2E4FB;
+  --color-on-secondary-container: #556679;
+
+  /* Brand accent — Juniper Mist teal */
+  --color-brand: #0096A4;
+  --color-on-brand: #FFFFFF;
+
+  /* Status colors */
   --color-healthy: #10B981;
   --color-drift: #F97316;
+  --color-drift-container: #FFEDD5;
+  --color-error: #BA1A1A;
+  --color-on-error: #FFFFFF;
+  --color-error-container: #FFDAD6;
+  --color-on-error-container: #93000A;
+
+  /* Legacy aliases (will be pruned when callsites are updated) */
+  --color-surface-lowest: #FFFFFF;
+  --color-surface-low: #F1F5F9;
+  --color-surface-high: #E2E8F0;
+  --color-surface-highest: #CBD5E1;
   --color-danger: #BA1A1A;
   --color-warning: #F97316;
-  --color-border: #CBD5E0;
+  --color-border: #CBD5E1;
 
   /* Typography */
   --font-family-display: 'Manrope', sans-serif;
@@ -36,11 +67,11 @@
   --font-display: 'Manrope', sans-serif;
   --font-sans: 'Inter', sans-serif;
 
-  /* Gradients */
+  /* Signature Gradient (per DESIGN.md §2) */
   --background-image-signature-gradient: linear-gradient(135deg, #041627, #1A2B3C);
 
-  /* Shadows */
-  --shadow-ambient: 0 20px 40px rgba(4,22,39,0.06);
+  /* Ambient shadow (per DESIGN.md §4) */
+  --shadow-ambient: 0 20px 40px rgba(4, 22, 39, 0.06);
 }
 
 @layer base {
