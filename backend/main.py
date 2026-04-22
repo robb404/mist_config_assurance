@@ -649,32 +649,52 @@ async def _sync_incidents(
         w["id"]: w.get("for_site") for w in (wlans or []) if "id" in w
     }
 
-    # Resolve open incidents where finding now passes
-    open_incidents = db.table("incident").select("*") \
-        .eq("org_id", org_id).eq("site_id", site_id).eq("status", "open").execute()
+    # Fetch every non-resolved/non-suppressed incident for this site so we
+    # can transition pending_verification → resolved (if the finding now
+    # passes) or pending_verification → open (if the finding still fails,
+    # meaning the remediation didn't stick).
+    relevant_incidents = db.table("incident").select("*") \
+        .eq("org_id", org_id).eq("site_id", site_id) \
+        .in_("status", ["open", "pending_verification"]).execute()
 
     passing_keys = {
         (f["standard_id"], f.get("wlan_id"))
         for f in findings if f["status"] == "pass"
     }
+    failing_keys = {
+        (f["standard_id"], f.get("wlan_id"))
+        for f in findings if f["status"] == "fail"
+    }
+    now_iso = datetime.now(timezone.utc).isoformat()
 
-    for inc in (open_incidents.data or []):
+    # First pass — transition based on what we just observed.
+    for inc in (relevant_incidents.data or []):
         key = (inc["standard_id"], inc.get("wlan_id"))
         if key in passing_keys:
             db.table("incident").update({
                 "status": "resolved",
-                "resolved_at": datetime.now(timezone.utc).isoformat(),
+                "resolved_at": now_iso,
             }).eq("id", inc["id"]).execute()
+            inc["status"] = "resolved"
+        elif inc["status"] == "pending_verification" and key in failing_keys:
+            # Remediation didn't stick — revert to open for re-attempt.
+            db.table("incident").update({
+                "status": "open",
+                "resolved_at": None,
+            }).eq("id", inc["id"]).execute()
+            inc["status"] = "open"
 
-    # Build a map of open incidents keyed by (standard_id, wlan_id)
+    # Build a map of currently-open incidents keyed by (standard_id, wlan_id)
+    # using the POST-transition state so the findings loop below sees the
+    # refreshed view.
     open_incident_map: dict[tuple, dict] = {
         (inc["standard_id"], inc.get("wlan_id")): inc
-        for inc in (open_incidents.data or [])
+        for inc in (relevant_incidents.data or [])
         if inc["status"] == "open"
     }
 
     # Which open incidents already have an active (pending/approved) remediation action?
-    open_ids = [inc["id"] for inc in (open_incidents.data or []) if inc["status"] == "open"]
+    open_ids = [inc["id"] for inc in (relevant_incidents.data or []) if inc["status"] == "open"]
     if open_ids:
         active_rows = db.table("remediation_action").select("incident_id") \
             .in_("incident_id", open_ids).in_("status", ["pending", "approved"]).execute()
@@ -762,20 +782,22 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
 
     if result["success"]:
         if result.get("org_level"):
-            db.table("incident").update({"status": "resolved", "resolved_at": now}) \
+            db.table("incident").update({"status": "pending_verification"}) \
                 .eq("org_id", org_id) \
                 .eq("standard_id", str(action["standard_id"])) \
                 .eq("wlan_id", action.get("wlan_id")) \
                 .eq("status", "open").execute()
-            log.info("org-level fix: resolved all open incidents for standard=%s wlan=%s",
+            log.info("org-level fix: pending verification for standard=%s wlan=%s",
                      action["standard_id"], action.get("wlan_id"))
         else:
-            db.table("incident").update({"status": "resolved", "resolved_at": now}) \
+            db.table("incident").update({"status": "pending_verification"}) \
                 .eq("id", action["incident_id"]).eq("org_id", org_id).execute()
-        # Validation is deferred to the next scheduled drift cycle to avoid
-        # burning 3× Mist calls per remediation (or 3× sites for org-level
-        # fixes). Users can force an immediate re-check from the site row's
-        # Check button if they need certainty before the next scheduled run.
+        # The incident is marked pending_verification — Mist acknowledged the
+        # fix but we haven't independently validated it. The next scheduled
+        # drift cycle (or a user-triggered Check) will transition this to
+        # 'resolved' if the finding passes, or back to 'open' if Mist's fix
+        # didn't stick. Users can force an immediate re-check from the site
+        # row's Check button if they need certainty before the scheduled run.
 
 
 async def _rerun_site(org_id: str, site_id: str, org: dict):

@@ -11,6 +11,8 @@ interface Props {
 
 export function IncidentPanel({ incidents, onUpdate }: Props) {
   const open = incidents.filter(i => i.status === 'open')
+  const verifying = incidents.filter(i => i.status === 'pending_verification')
+  const active = [...open, ...verifying]
 
   async function remediateAll() {
     const { actions } = await api.listPendingRemediation()
@@ -23,18 +25,18 @@ export function IncidentPanel({ incidents, onUpdate }: Props) {
     <div className="bg-surface-lowest rounded-lg p-5">
       <div className="flex items-center justify-between mb-4">
         <h2 className="font-display text-sm font-semibold text-primary uppercase tracking-wide">
-          Open Incidents ({open.length})
+          Active Incidents ({active.length})
         </h2>
         {open.length > 0 && (
           <Button variant="primary" size="sm" onClick={remediateAll}>Remediate All</Button>
         )}
       </div>
 
-      {open.length === 0 ? (
-        <p className="text-sm text-on-surface/40">No open incidents.</p>
+      {active.length === 0 ? (
+        <p className="text-sm text-on-surface/40">No active incidents.</p>
       ) : (
         <div className="space-y-3">
-          {open.map(inc => (
+          {active.map(inc => (
             <div key={inc.id} className="flex items-center justify-between p-3 bg-surface-low rounded-lg">
               <div className="min-w-0">
                 <p className="text-sm font-medium truncate">{inc.title}</p>
@@ -44,6 +46,13 @@ export function IncidentPanel({ incidents, onUpdate }: Props) {
             </div>
           ))}
         </div>
+      )}
+
+      {verifying.length > 0 && (
+        <p className="text-xs text-on-surface/50 mt-3">
+          <strong>{verifying.length}</strong> incident{verifying.length === 1 ? '' : 's'} awaiting verification by the next scheduled check.
+          Click <strong>Check</strong> on this site to verify now.
+        </p>
       )}
     </div>
   )

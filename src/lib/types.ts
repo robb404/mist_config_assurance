@@ -94,7 +94,7 @@ export interface Incident {
   ssid?: string
   opened_at: string
   resolved_at?: string
-  status: 'open' | 'resolved' | 'suppressed'
+  status: 'open' | 'resolved' | 'suppressed' | 'pending_verification'
 }
 
 export interface RemediationAction {

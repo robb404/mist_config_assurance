@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { api } from '@/lib/api'
 import type { Incident, RemediationAction } from '@/lib/types'
 
-type Filter = 'all' | 'open' | 'failed' | 'resolved' | 'suppressed'
+type Filter = 'all' | 'open' | 'verifying' | 'resolved' | 'suppressed'
 
 export default function ActivityPage() {
   const router = useRouter()
@@ -35,15 +35,10 @@ export default function ActivityPage() {
   }, [load])
 
   const actionMap = Object.fromEntries(actions.map(a => [a.incident_id, a]))
-  const failedIds = new Set(
-    incidents
-      .filter(i => i.status === 'open' && actionMap[i.id]?.status === 'failed')
-      .map(i => i.id),
-  )
 
   const counts = {
     open:       incidents.filter(i => i.status === 'open').length,
-    failed:     failedIds.size,
+    verifying:  incidents.filter(i => i.status === 'pending_verification').length,
     resolved:   incidents.filter(i => i.status === 'resolved').length,
     suppressed: incidents.filter(i => i.status === 'suppressed').length,
   }
@@ -61,7 +56,7 @@ export default function ActivityPage() {
     }
     if (filter === 'all')        return true
     if (filter === 'open')       return inc.status === 'open'
-    if (filter === 'failed')     return failedIds.has(inc.id)
+    if (filter === 'verifying')  return inc.status === 'pending_verification'
     if (filter === 'resolved')   return inc.status === 'resolved'
     if (filter === 'suppressed') return inc.status === 'suppressed'
     return true
@@ -106,7 +101,7 @@ export default function ActivityPage() {
 
         <div className="grid grid-cols-4 gap-3 mb-5">
           <StatTile label="Open"       value={counts.open}       tone="drift"   active={filter === 'open'}       onClick={() => selectFilter('open')} />
-          <StatTile label="Failed"     value={counts.failed}     tone="error"   active={filter === 'failed'}     onClick={() => selectFilter('failed')} />
+          <StatTile label="Verifying"  value={counts.verifying}  tone="neutral" active={filter === 'verifying'}  onClick={() => selectFilter('verifying')} />
           <StatTile label="Resolved"   value={counts.resolved}   tone="healthy" active={filter === 'resolved'}   onClick={() => selectFilter('resolved')} />
           <StatTile label="Suppressed" value={counts.suppressed} tone="neutral" active={filter === 'suppressed'} onClick={() => selectFilter('suppressed')} />
         </div>
