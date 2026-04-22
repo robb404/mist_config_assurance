@@ -89,6 +89,8 @@ async def connect(
         info = await mist.get_org_info(req.mist_token, base_url, req.mist_org_id)
     except ValueError as exc:
         raise HTTPException(401, str(exc))
+    except mist.MistRateLimited as exc:
+        raise HTTPException(429, str(exc))
     except httpx.TimeoutException:
         raise HTTPException(504, f"Timed out connecting to {req.cloud_endpoint}. Check the endpoint and network.")
     except Exception as exc:

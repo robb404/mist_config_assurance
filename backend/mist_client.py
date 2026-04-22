@@ -16,11 +16,20 @@ def _headers(token: str) -> dict:
     return {"Authorization": f"Token {token}"}
 
 
+class MistRateLimited(Exception):
+    """Mist API returned 429 Too Many Requests."""
+
+
 async def get_org_info(token: str, base_url: str, mist_org_id: str | None = None) -> dict:
     async with httpx.AsyncClient(verify=False) as client:
         resp = await client.get(f"{base_url}self", headers=_headers(token), timeout=TIMEOUT)
         if resp.status_code == 401:
             raise ValueError("Invalid API token.")
+        if resp.status_code == 429:
+            raise MistRateLimited(
+                "Mist API rate limit reached (5,000 calls/hour per token). "
+                "Wait a few minutes and try again, or use a different token."
+            )
         resp.raise_for_status()
         data = resp.json()
     org_privs = [p for p in data.get("privileges", []) if p.get("scope") == "org"]
