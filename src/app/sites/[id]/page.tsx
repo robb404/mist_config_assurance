@@ -74,7 +74,7 @@ export default function SiteDetailPage() {
         <div className="min-w-0">
           <p className="label-overline">Site</p>
           <h1 className="font-display text-2xl font-semibold text-primary tracking-tight truncate">
-            {site?.name ?? id}
+            {site?.name || site?.id || id}
           </h1>
           <p className="text-xs text-on-surface/50 mt-1">
             {site?.last_checked_at

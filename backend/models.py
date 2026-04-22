@@ -16,14 +16,14 @@ class OrgSettingsRequest(BaseModel):
 
 
 class StandardCreate(BaseModel):
-    name: str
+    name: str = Field(min_length=1)
     description: str | None = None
     scope: Literal["wlan", "site", "org"]
     filter: list | None = None
-    check_field: str
-    check_condition: str
+    check_field: str = Field(min_length=1)
+    check_condition: str = Field(min_length=1)
     check_value: object | None = None
-    remediation_field: str
+    remediation_field: str = Field(min_length=1)
     remediation_value: object
     auto_remediate: bool | None = None
     enabled: bool = True

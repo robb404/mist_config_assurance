@@ -41,7 +41,7 @@ export function SiteRow({ site, failed, passed, selected, onToggleSelect, onRunC
         href={`/sites/${site.id}`}
         className="flex-1 min-w-0 flex items-center gap-6 hover:opacity-90 transition-opacity"
       >
-        <span className="font-medium text-on-surface truncate">{site.name}</span>
+        <span className="font-medium text-on-surface truncate">{site.name || site.id || 'Unnamed site'}</span>
         <span className="text-xs text-healthy font-medium">{passed} pass</span>
         {site.last_checked_at && (
           <span className="text-xs text-on-surface/40">

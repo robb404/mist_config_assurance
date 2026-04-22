@@ -418,7 +418,7 @@ async def create_standard(body: StandardCreate, org_id: str = Depends(get_org_id
     db = get_client()
     row = {**body.model_dump(), "org_id": org_id}
     result = db.table("standard").insert(row).execute()
-    return result.data[0]
+    return _first_or_500(result, "standard")
 
 
 @app.put("/api/standards/{standard_id}")
@@ -427,7 +427,7 @@ async def update_standard(standard_id: str, body: StandardUpdate, org_id: str = 
     result = db.table("standard").update(body.model_dump()).eq("id", standard_id).eq("org_id", org_id).execute()
     if not result.data:
         raise HTTPException(404, "Standard not found")
-    return result.data[0]
+    return _first_or_500(result, "standard")
 
 
 @app.delete("/api/standards/{standard_id}", status_code=204)
@@ -475,15 +475,22 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
     failed  = sum(1 for f in findings if f["status"] == "fail")
     skipped = sum(1 for f in findings if f["status"] == "skip")
 
-    run = db.table("validation_run").insert({
-        "org_id": org_id, "site_id": site_id, "site_name": site_name,
-        "triggered_by": req.triggered_by,
-        "passed": passed, "failed": failed, "skipped": skipped,
-    }).execute().data[0]
+    run = _first_or_500(
+        db.table("validation_run").insert({
+            "org_id": org_id, "site_id": site_id, "site_name": site_name,
+            "triggered_by": req.triggered_by,
+            "passed": passed, "failed": failed, "skipped": skipped,
+        }).execute(),
+        "validation_run",
+    )
 
     run_id = run["id"]
-    for f in findings:
-        db.table("finding").insert({**f, "run_id": run_id}).execute()
+    if findings:
+        # Batch insert — one round-trip instead of N, atomic-ish so a
+        # partial failure doesn't leave the run with half its children.
+        db.table("finding").insert(
+            [{**f, "run_id": run_id} for f in findings]
+        ).execute()
 
     await _sync_incidents(org_id, site_id, site_name, findings, standards, org, org.get("mist_org_id"), wlans=wlans)
 
@@ -630,6 +637,18 @@ def _get_org_or_404(org_id: str) -> dict:
     return row.data
 
 
+def _first_or_500(result, what: str) -> dict:
+    """Return the first row from a Supabase insert/update result, or 500 if empty.
+
+    Supabase should always return the row it just wrote, but if it doesn't
+    (network blip, policy rejected silently) we'd rather fail loudly than
+    crash with an IndexError deep in the call stack.
+    """
+    if not result.data:
+        raise HTTPException(500, f"Database did not return the expected {what} row")
+    return result.data[0]
+
+
 async def _get_mist_org_id(token: str, base_url: str) -> str:
     info = await mist.get_org_info(token, base_url)
     return info["org_id"]
@@ -731,20 +750,26 @@ async def _sync_incidents(
             # Incident already open but no active action — create a new remediation action
             inc = existing_inc
         else:
-            inc = db.table("incident").insert({
-                "org_id": org_id, "site_id": site_id, "site_name": site_name,
-                "standard_id": f["standard_id"], "title": std["name"],
-                "wlan_id": f.get("wlan_id"), "ssid": f.get("ssid"),
-            }).execute().data[0]
+            inc = _first_or_500(
+                db.table("incident").insert({
+                    "org_id": org_id, "site_id": site_id, "site_name": site_name,
+                    "standard_id": f["standard_id"], "title": std["name"],
+                    "wlan_id": f.get("wlan_id"), "ssid": f.get("ssid"),
+                }).execute(),
+                "incident",
+            )
 
-        action = db.table("remediation_action").insert({
-            "incident_id": inc["id"], "org_id": org_id,
-            "site_id": site_id, "wlan_id": f.get("wlan_id"),
-            "standard_id": f["standard_id"],
-            "desired_value": std["remediation_value"],
-            "for_site": for_site,
-            "status": "pending",
-        }).execute().data[0]
+        action = _first_or_500(
+            db.table("remediation_action").insert({
+                "incident_id": inc["id"], "org_id": org_id,
+                "site_id": site_id, "wlan_id": f.get("wlan_id"),
+                "standard_id": f["standard_id"],
+                "desired_value": std["remediation_value"],
+                "for_site": for_site,
+                "status": "pending",
+            }).execute(),
+            "remediation_action",
+        )
 
         if auto:
             await _execute_remediation_action(action, org_id, mist_org_id)
@@ -824,12 +849,17 @@ async def _rerun_site(org_id: str, site_id: str, org: dict):
         passed  = sum(1 for f in findings if f["status"] == "pass")
         failed  = sum(1 for f in findings if f["status"] == "fail")
         skipped = sum(1 for f in findings if f["status"] == "skip")
-        run = db.table("validation_run").insert({
-            "org_id": org_id, "site_id": site_id, "site_name": site_name,
-            "triggered_by": "scheduled", "passed": passed, "failed": failed, "skipped": skipped,
-        }).execute().data[0]
-        for f in findings:
-            db.table("finding").insert({**f, "run_id": run["id"]}).execute()
+        run = _first_or_500(
+            db.table("validation_run").insert({
+                "org_id": org_id, "site_id": site_id, "site_name": site_name,
+                "triggered_by": "scheduled", "passed": passed, "failed": failed, "skipped": skipped,
+            }).execute(),
+            "validation_run",
+        )
+        if findings:
+            db.table("finding").insert(
+                [{**f, "run_id": run["id"]} for f in findings]
+            ).execute()
         await _sync_incidents(org_id, site_id, site_name, findings, stds.data or [], org, org.get("mist_org_id"), wlans=wlans)
         db.table("site").update({"last_checked_at": datetime.now(timezone.utc).isoformat()}) \
             .eq("id", site_id).eq("org_id", org_id).execute()
@@ -889,12 +919,17 @@ async def run_drift_for_org(org_id: str):
             passed  = sum(1 for f in findings if f["status"] == "pass")
             failed  = sum(1 for f in findings if f["status"] == "fail")
             skipped = sum(1 for f in findings if f["status"] == "skip")
-            run = db.table("validation_run").insert({
-                "org_id": org_id, "site_id": site["id"], "site_name": site["name"],
-                "triggered_by": "scheduled", "passed": passed, "failed": failed, "skipped": skipped,
-            }).execute().data[0]
-            for f in findings:
-                db.table("finding").insert({**f, "run_id": run["id"]}).execute()
+            run = _first_or_500(
+                db.table("validation_run").insert({
+                    "org_id": org_id, "site_id": site["id"], "site_name": site["name"],
+                    "triggered_by": "scheduled", "passed": passed, "failed": failed, "skipped": skipped,
+                }).execute(),
+                "validation_run",
+            )
+            if findings:
+                db.table("finding").insert(
+                    [{**f, "run_id": run["id"]} for f in findings]
+                ).execute()
             await _sync_incidents(org_id, site["id"], site["name"], findings, stds.data or [], org, org.get("mist_org_id"), wlans=wlans)
         except Exception as exc:
             log.exception("Drift check failed for site=%s: %s", site["id"], exc)
