@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useState } from 'react'
+import Link from 'next/link'
 import { Search } from 'lucide-react'
 import { PageShell } from '@/components/layout/PageShell'
 import { SiteRow } from '@/components/dashboard/SiteRow'
@@ -19,8 +20,16 @@ export default function DashboardPage() {
   const [search, setSearch] = useState('')
   const [syncing, setSyncing] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [orgConnected, setOrgConnected] = useState<boolean | null>(null)
 
   async function load() {
+    try {
+      await api.getOrg()
+      setOrgConnected(true)
+    } catch {
+      setOrgConnected(false)
+      return
+    }
     const { sites } = await api.listSites()
     setSites(sites)
     const runMap: Record<string, RunCounts> = {}
@@ -137,7 +146,16 @@ export default function DashboardPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto pr-1">
-          {sites.length === 0 ? (
+          {orgConnected === false ? (
+            <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center space-y-3">
+              <p className="text-sm text-on-surface">
+                Welcome. Let's get your Mist org connected.
+              </p>
+              <Link href="/welcome">
+                <Button variant="primary" size="sm">Start setup →</Button>
+              </Link>
+            </div>
+          ) : sites.length === 0 ? (
             <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50">
               No sites yet. <button onClick={syncSites} className="text-primary underline">Sync from Mist</button>
             </div>
