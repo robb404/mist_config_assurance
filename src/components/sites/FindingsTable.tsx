@@ -20,7 +20,14 @@ export function FindingsTable({ findings, standards, incidents, actions, onUpdat
   const stdMap = Object.fromEntries(standards.map(s => [s.id, s]))
 
   if (findings.length === 0) {
-    return <p className="text-sm text-on-surface/40">No findings.</p>
+    return (
+      <div className="text-center py-8">
+        <p className="text-sm text-on-surface/60 mb-1">This site hasn't been scanned yet.</p>
+        <p className="text-xs text-on-surface/40">
+          Click <strong className="text-on-surface/70">Check</strong> in the page header to run the first drift check.
+        </p>
+      </div>
+    )
   }
 
   // Group WLAN findings by wlan_id; site findings are collected separately

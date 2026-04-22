@@ -24,8 +24,11 @@ export function ActivityTable({ incidents, actions, onUpdate }: Props) {
 
   if (incidents.length === 0) {
     return (
-      <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50 text-sm">
-        No incidents match your filters.
+      <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center">
+        <p className="text-sm text-on-surface/60 mb-1">No incidents match your filters.</p>
+        <p className="text-xs text-on-surface/40">
+          Drift and auto-remediation events will appear here as scans run.
+        </p>
       </div>
     )
   }

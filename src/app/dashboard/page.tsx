@@ -15,6 +15,7 @@ type Filter    = 'all' | 'healthy' | 'drift' | 'error'
 export default function DashboardPage() {
   const [sites, setSites] = useState<Site[]>([])
   const [runs, setRuns] = useState<Record<string, RunCounts>>({})
+  const [standardsCount, setStandardsCount] = useState(0)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [filter, setFilter] = useState<Filter>('all')
   const [search, setSearch] = useState('')
@@ -30,8 +31,12 @@ export default function DashboardPage() {
       setOrgConnected(false)
       return
     }
-    const { sites } = await api.listSites()
+    const [{ sites }, { standards }] = await Promise.all([
+      api.listSites(),
+      api.listStandards(),
+    ])
     setSites(sites)
+    setStandardsCount(standards.length)
     const runMap: Record<string, RunCounts> = {}
     await Promise.all(sites.map(async s => {
       try {
@@ -156,8 +161,31 @@ export default function DashboardPage() {
               </Link>
             </div>
           ) : sites.length === 0 ? (
-            <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50">
-              No sites yet. <button onClick={syncSites} className="text-primary underline">Sync from Mist</button>
+            <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center space-y-3">
+              <p className="text-sm text-on-surface">
+                Your Mist org is connected. Next, sync your sites.
+              </p>
+              <Button variant="primary" size="sm" onClick={syncSites} disabled={syncing}>
+                {syncing ? 'Syncing…' : 'Sync Sites'}
+              </Button>
+            </div>
+          ) : standardsCount === 0 ? (
+            <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center space-y-3">
+              <p className="text-sm text-on-surface">
+                {sites.length} {sites.length === 1 ? 'site' : 'sites'} synced. Add standards to start checking for drift.
+              </p>
+              <Link href="/standards">
+                <Button variant="primary" size="sm">Add standards →</Button>
+              </Link>
+            </div>
+          ) : sites.every(s => !s.last_checked_at) ? (
+            <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center space-y-3">
+              <p className="text-sm text-on-surface">
+                Ready to run your first drift check across {sites.length} {sites.length === 1 ? 'site' : 'sites'}.
+              </p>
+              <Button variant="primary" size="sm" onClick={checkBatch} disabled={checking}>
+                {checking ? 'Checking…' : 'Check All'}
+              </Button>
             </div>
           ) : visibleSites.length === 0 ? (
             <div className="bg-surface-lowest rounded-lg px-8 py-12 text-center text-on-surface/50">
