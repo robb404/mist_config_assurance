@@ -86,11 +86,26 @@ sequenceDiagram
         Rem->>Mist: PUT sites/:id/wlans/:wlan_id<br/>or sites/:id/setting<br/>or sites/:id
         Rem-->>BE: success / error
         BE->>DB: UPDATE action status + incident status
+        BE->>BE: increment_calls(org_id, 1)<br/>count the PATCH toward budget
       end
     end
     BE->>BE: asyncio.sleep(sleep_secs)
   end
 ```
+
+### Remediation verification
+
+Remediation **does not trigger an automatic rescan**. Trusting Mist's PATCH
+success response and deferring validation to the next scheduled drift cycle
+avoids a 3× call amplification per remediation (and 3N× for org-scope fixes
+that used to fan out across every monitored site). The `Last checked`
+timestamp on every site row signals data freshness. Users can force an
+immediate re-check via the per-row `Check` button when they need certainty
+before the next scheduled cycle.
+
+Webhook-triggered site reruns are a separate code path — there, Mist is
+explicitly reporting "this site changed", so the 3 GET calls are the correct
+action and are counted toward the hourly budget.
 
 ## Scheduler modes
 

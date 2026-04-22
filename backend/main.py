@@ -755,6 +755,11 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
     }
     db.table("remediation_action").update(update).eq("id", action["id"]).execute()
 
+    # Count the Mist PATCH call toward the hourly budget. Previously only
+    # the 3 GETs inside the drift loop were counted, so the UI understated
+    # real usage by ~25% during active remediation.
+    increment_calls(org_id, 1)
+
     if result["success"]:
         if result.get("org_level"):
             db.table("incident").update({"status": "resolved", "resolved_at": now}) \
@@ -764,16 +769,22 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
                 .eq("status", "open").execute()
             log.info("org-level fix: resolved all open incidents for standard=%s wlan=%s",
                      action["standard_id"], action.get("wlan_id"))
-            # Re-run all monitored sites so findings reflect the fix
-            asyncio.create_task(_rerun_all_sites(org_id, org))
         else:
             db.table("incident").update({"status": "resolved", "resolved_at": now}) \
                 .eq("id", action["incident_id"]).eq("org_id", org_id).execute()
-            asyncio.create_task(_rerun_site(org_id, action["site_id"], org))
+        # Validation is deferred to the next scheduled drift cycle to avoid
+        # burning 3× Mist calls per remediation (or 3× sites for org-level
+        # fixes). Users can force an immediate re-check from the site row's
+        # Check button if they need certainty before the next scheduled run.
 
 
 async def _rerun_site(org_id: str, site_id: str, org: dict):
-    """Re-validate a single site after remediation to refresh findings."""
+    """
+    Re-validate a single site. Invoked from the Mist webhook handler when
+    Mist reports a config change on a specific site. The remediation success
+    path does NOT call this — validation there is deferred to the next
+    scheduled drift cycle to avoid 3× call amplification per remediation.
+    """
     try:
         token = decrypt(org["mist_token"])
         base_url = mist.build_base_url(org["cloud_endpoint"])
@@ -781,6 +792,8 @@ async def _rerun_site(org_id: str, site_id: str, org: dict):
         site_setting = await mist.get_site_setting(token, base_url, site_id)
         site_entity = await mist.get_site(token, base_url, site_id)
         site_setting = {**site_setting, **{k: site_entity.get(k) for k in remediation._SITE_ENTITY_FIELDS}}
+        # Count the 3 Mist GETs we just made against the hourly budget.
+        increment_calls(org_id, 3)
         db = get_client()
         stds = db.table("standard").select("*").eq("org_id", org_id).eq("enabled", True).execute()
         site_row = db.table("site").select("name").eq("id", site_id).eq("org_id", org_id).maybe_single().execute()
@@ -801,13 +814,6 @@ async def _rerun_site(org_id: str, site_id: str, org: dict):
         log.info("post-remediation rerun complete site=%s passed=%s failed=%s", site_id, passed, failed)
     except Exception as exc:
         log.exception("post-remediation rerun failed for site=%s: %s", site_id, exc)
-
-
-async def _rerun_all_sites(org_id: str, org: dict):
-    db = get_client()
-    sites = db.table("site").select("*").eq("org_id", org_id).eq("monitored", True).execute()
-    for site in (sites.data or []):
-        await _rerun_site(org_id, site["id"], org)
 
 
 async def run_drift_for_org(org_id: str):
