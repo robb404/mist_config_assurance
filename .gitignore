@@ -10,3 +10,4 @@ dist/
 .superpowers/
 tsconfig.tsbuildinfo
 docs/mist-api/
+*.swp
