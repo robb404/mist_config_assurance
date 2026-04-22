@@ -173,6 +173,9 @@ export function DebugLogsPanel({ standalone = false }: Props) {
                 {new Date(e.timestamp * 1000).toLocaleTimeString(undefined, { hour12: false })}{' '}
               </span>
               <span className="inline-block w-16">{e.level}</span>
+              {e.request_id && (
+                <span className="text-white/30">[{e.request_id.slice(0, 8)}] </span>
+              )}
               <span className="text-white/40">{e.logger} </span>
               {e.message}
             </div>

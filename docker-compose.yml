@@ -16,6 +16,7 @@ services:
       RESEND_API_KEY: ${RESEND_API_KEY}
       RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL}
       ENABLE_DEBUG_LOGS: ${ENABLE_DEBUG_LOGS:-false}
+      LOG_FORMAT: ${LOG_FORMAT:-plain}
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8001/health').status == 200 else 1)"]
       interval: 10s

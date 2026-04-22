@@ -36,6 +36,7 @@ class DebugLogHandler(logging.Handler):
             "level": record.levelname,
             "logger": record.name,
             "message": message,
+            "request_id": getattr(record, "request_id", "") or "",
         }
         with self._lock:
             entry["id"] = self._next_id

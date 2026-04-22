@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import secrets
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -13,9 +14,11 @@ import httpx
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
 
 load_dotenv(Path(__file__).resolve().parent / ".env")
 
+from . import logging_setup
 from . import mist_client as mist
 from . import scheduler as sched
 from .ai_provider import parse_filter as _ai_parse_filter
@@ -36,8 +39,8 @@ from .rate_limiter import (
     budget_summary, can_check, increment_calls, min_interval_mins, _reset_window_if_needed,
 )
 
+logging_setup.configure_logging()
 log = logging.getLogger("mist_ca")
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 debug_logs.install()
 
 # ---------------------------------------------------------------------------
@@ -103,6 +106,28 @@ app.add_middleware(
     allow_headers=["*"],
     allow_credentials=True,
 )
+
+
+class RequestIdMiddleware(BaseHTTPMiddleware):
+    """Assign an X-Request-ID per request and propagate via ContextVar.
+
+    Every log line emitted during the request will carry the ID, making it
+    trivial to grep across services ('all the log lines for request xyz').
+    Clients can correlate by reading the X-Request-ID response header.
+    """
+
+    async def dispatch(self, request: Request, call_next):
+        rid = request.headers.get("X-Request-ID") or uuid.uuid4().hex
+        logging_setup.set_request_id(rid)
+        try:
+            response = await call_next(request)
+        finally:
+            logging_setup.set_request_id(None)
+        response.headers["X-Request-ID"] = rid
+        return response
+
+
+app.add_middleware(RequestIdMiddleware)
 
 
 # ---------------------------------------------------------------------------

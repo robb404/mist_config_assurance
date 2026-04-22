@@ -40,6 +40,7 @@ export interface DebugLogEntry {
   level: 'DEBUG' | 'INFO' | 'WARNING' | 'ERROR' | 'CRITICAL'
   logger: string
   message: string
+  request_id?: string
 }
 
 export interface DebugLogPage {
