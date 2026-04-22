@@ -30,6 +30,7 @@ export function MistConnectionForm() {
   const [endpoint, setEndpoint] = useState('api.mist.com')
   const [orgId, setOrgId] = useState('')
   const [saving, setSaving] = useState(false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
@@ -65,6 +66,24 @@ export function MistConnectionForm() {
     }
   }
 
+  async function disconnect() {
+    if (!confirm('Disconnect this Mist org from this workspace? Standards and incidents are preserved — only the API credentials and Mist org ID are cleared.')) return
+    setDisconnecting(true)
+    setMsg('')
+    try {
+      await api.disconnect()
+      setOrg(null)
+      setEditing(false)
+      setToken('')
+      setOrgId('')
+      setMsg('Disconnected.')
+    } catch (err: unknown) {
+      setMsg(`Error: ${err instanceof Error ? err.message : 'Disconnect failed'}`)
+    } finally {
+      setDisconnecting(false)
+    }
+  }
+
   const adornment = org
     ? <span className="text-xs text-healthy font-medium normal-case tracking-normal">✓ {org.org_name}</span>
     : null
@@ -89,18 +108,30 @@ export function MistConnectionForm() {
               <span className="text-on-surface-variant font-mono text-xs tracking-widest">••••••••••••••••</span>
             </div>
           </div>
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            onClick={() => {
-              setEditing(true)
-              setMsg('')
-              setToken('')
-            }}
-          >
-            Change connection
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                setEditing(true)
+                setMsg('')
+                setToken('')
+              }}
+            >
+              Change connection
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={disconnect}
+              disabled={disconnecting}
+            >
+              {disconnecting ? 'Disconnecting…' : 'Disconnect'}
+            </Button>
+          </div>
+          {msg && <p className="text-sm text-on-surface/70">{msg}</p>}
         </div>
       )}
 

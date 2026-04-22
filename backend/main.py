@@ -153,6 +153,21 @@ async def connect(
         raise HTTPException(502, f"Could not reach Mist: {exc}")
 
     db = get_client()
+
+    # Guard: one Mist org per workspace. Two workspaces monitoring the same
+    # Mist org would double the API call volume against a shared 5,000/hr
+    # ceiling and could race on auto-remediations. Check BEFORE upsert so
+    # the caller gets a clean 409, not a DB unique-constraint violation.
+    claim = db.table("org_config").select("org_id") \
+        .eq("mist_org_id", info["org_id"]).neq("org_id", org_id).execute()
+    if claim.data:
+        raise HTTPException(
+            409,
+            "This Mist organization is already being monitored by another "
+            "workspace. Disconnect it there first, or switch to that "
+            "workspace in the top-left organization switcher.",
+        )
+
     db.table("org_config").upsert({
         "org_id": org_id,
         "mist_token": encrypt(req.mist_token),
@@ -194,6 +209,29 @@ async def get_org(org_id: str = Depends(get_org_id)):
     data = dict(row.data)
     data.pop("mist_token", None)
     return data
+
+
+@app.delete("/api/org/connect")
+async def disconnect(org_id: str = Depends(get_org_id)):
+    """Release the Mist org claim held by this workspace.
+
+    Nulls out the encrypted token + Mist org ID so the same Mist org can
+    be connected from a different workspace. Standards, incidents, and
+    sites are preserved in case the user reconnects later.
+    """
+    db = get_client()
+    row = db.table("org_config").select("mist_org_id").eq("org_id", org_id) \
+            .maybe_single().execute()
+    if not row or not row.data:
+        raise HTTPException(404, "No Mist connection to disconnect.")
+    db.table("org_config").update({
+        "mist_token": None,
+        "mist_org_id": None,
+    }).eq("org_id", org_id).execute()
+    # Stop any scheduled drift jobs for this workspace until they reconnect.
+    sched.remove_org_job(org_id)
+    log.info("disconnected Mist org for workspace=%s", org_id)
+    return {"ok": True}
 
 
 @app.patch("/api/org/settings")
