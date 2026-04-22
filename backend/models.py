@@ -1,11 +1,11 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ConnectRequest(BaseModel):
-    mist_token: str
-    cloud_endpoint: str
+    mist_token: str = Field(min_length=1, description="Mist API token — must be non-empty")
+    cloud_endpoint: str = Field(min_length=1)
     mist_org_id: str | None = None  # optional — auto-detected from token if omitted
 
 

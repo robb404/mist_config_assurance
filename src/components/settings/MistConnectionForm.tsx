@@ -24,23 +24,40 @@ const inputCls = 'w-full px-3 py-2 text-sm bg-surface-low rounded-lg outline out
 const labelCls = 'block text-xs font-medium text-on-surface/70 uppercase tracking-wide mb-1'
 
 export function MistConnectionForm() {
-  const [token, setToken]       = useState('')
+  const [org, setOrg] = useState<OrgConfig | null>(null)
+  const [editing, setEditing] = useState(false)
+  const [token, setToken] = useState('')
   const [endpoint, setEndpoint] = useState('api.mist.com')
-  const [orgId, setOrgId]       = useState('')
-  const [org, setOrg]           = useState<OrgConfig | null>(null)
-  const [saving, setSaving]     = useState(false)
-  const [msg, setMsg]           = useState('')
+  const [orgId, setOrgId] = useState('')
+  const [saving, setSaving] = useState(false)
+  const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    api.getOrg().then(setOrg).catch(() => {})
+    api.getOrg()
+      .then(data => {
+        setOrg(data)
+        setEndpoint(data.cloud_endpoint ?? 'api.mist.com')
+      })
+      .catch(() => {
+        // Not yet connected — keep editing=false so the CTA shows
+      })
   }, [])
 
   async function connect(e: React.FormEvent) {
-    e.preventDefault(); setSaving(true); setMsg('')
+    e.preventDefault()
+    if (!token.trim()) {
+      setMsg('Error: API token is required')
+      return
+    }
+    setSaving(true)
+    setMsg('')
     try {
       const res = await api.connect(token, endpoint, orgId || undefined)
       setMsg(`Connected to: ${(res as { org_name: string }).org_name}`)
       setOrg(await api.getOrg())
+      setEditing(false)
+      setToken('')
+      setOrgId('')
     } catch (err: unknown) {
       setMsg(`Error: ${err instanceof Error ? err.message : 'Connection failed'}`)
     } finally {
@@ -52,34 +69,89 @@ export function MistConnectionForm() {
     ? <span className="text-xs text-healthy font-medium normal-case tracking-normal">✓ {org.org_name}</span>
     : null
 
+  const showForm = !org || editing
+
   return (
     <CollapsibleSection title="Mist Connection" adornment={adornment}>
-      <form onSubmit={connect} className="space-y-4">
-        <div>
-          <label className={labelCls}>Cloud Endpoint</label>
-          <select value={endpoint} onChange={e => setEndpoint(e.target.value)} className={inputCls}>
-            {ENDPOINTS.map(ep => (
-              <option key={ep.value} value={ep.value}>{ep.label}</option>
-            ))}
-          </select>
+      {!showForm && org && (
+        <div className="space-y-3">
+          <div className="space-y-2 text-sm">
+            <div className="flex items-baseline gap-3">
+              <span className="text-xs uppercase tracking-wide text-on-surface/60 min-w-[7rem]">Organization</span>
+              <span className="text-on-surface font-medium">{org.org_name}</span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-xs uppercase tracking-wide text-on-surface/60 min-w-[7rem]">Endpoint</span>
+              <span className="text-on-surface font-mono text-xs">{org.cloud_endpoint}</span>
+            </div>
+            <div className="flex items-baseline gap-3">
+              <span className="text-xs uppercase tracking-wide text-on-surface/60 min-w-[7rem]">API Token</span>
+              <span className="text-on-surface-variant font-mono text-xs tracking-widest">••••••••••••••••</span>
+            </div>
+          </div>
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={() => {
+              setEditing(true)
+              setMsg('')
+              setToken('')
+            }}
+          >
+            Change connection
+          </Button>
         </div>
-        <div>
-          <label className={labelCls}>API Token</label>
-          <input type="password" value={token} onChange={e => setToken(e.target.value)} required
-            placeholder="Enter your Mist API token"
-            className={inputCls} />
-        </div>
-        <div>
-          <label className={labelCls}>
-            Mist Org ID <span className="normal-case font-normal opacity-60">(optional — auto-detected if you have only one org)</span>
-          </label>
-          <input type="text" value={orgId} onChange={e => setOrgId(e.target.value)}
-            placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-            className={inputCls} />
-        </div>
-        <Button type="submit" disabled={saving}>{saving ? 'Connecting…' : 'Connect'}</Button>
-        {msg && <p className="text-sm text-on-surface/70">{msg}</p>}
-      </form>
+      )}
+
+      {showForm && (
+        <form onSubmit={connect} className="space-y-4">
+          <div>
+            <label className={labelCls}>Cloud Endpoint</label>
+            <select value={endpoint} onChange={e => setEndpoint(e.target.value)} className={inputCls}>
+              {ENDPOINTS.map(ep => (
+                <option key={ep.value} value={ep.value}>{ep.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className={labelCls}>API Token</label>
+            <input
+              type="password"
+              value={token}
+              onChange={e => setToken(e.target.value)}
+              required
+              minLength={1}
+              placeholder="Enter your Mist API token"
+              className={inputCls}
+              autoComplete="off"
+            />
+          </div>
+          <div>
+            <label className={labelCls}>
+              Mist Org ID <span className="normal-case font-normal opacity-60">(optional — auto-detected if you have only one org)</span>
+            </label>
+            <input
+              type="text"
+              value={orgId}
+              onChange={e => setOrgId(e.target.value)}
+              placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+              className={inputCls}
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <Button type="submit" disabled={saving || !token.trim()}>
+              {saving ? 'Connecting…' : (org ? 'Reconnect' : 'Connect')}
+            </Button>
+            {org && editing && (
+              <Button type="button" variant="ghost" size="sm" onClick={() => { setEditing(false); setMsg(''); setToken('') }}>
+                Cancel
+              </Button>
+            )}
+          </div>
+          {msg && <p className="text-sm text-on-surface/70">{msg}</p>}
+        </form>
+      )}
     </CollapsibleSection>
   )
 }
