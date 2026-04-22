@@ -59,7 +59,19 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Mist Config Assurance", lifespan=lifespan)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# CORS — lock to the configured app origin. In normal operation the browser
+# never hits the backend directly (Next.js proxy forwards server-side), but
+# restricting CORS blocks drive-by attacks if port 8001 is ever reachable
+# from the internet.
+_app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[_app_url],
+    allow_methods=["*"],
+    allow_headers=["*"],
+    allow_credentials=True,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -545,7 +557,7 @@ async def retry_action(action_id: str, org_id: str = Depends(get_org_id)):
     if row is None or not row.data:
         raise HTTPException(404, "Action not found")
     db.table("remediation_action").update({"status": "pending", "error_detail": None}) \
-        .eq("id", action_id).execute()
+        .eq("id", action_id).eq("org_id", org_id).execute()
     org = _get_org_or_404(org_id)
     await _execute_remediation_action(row.data, org_id, org.get("mist_org_id"))
     return {"ok": True}
@@ -754,7 +766,7 @@ async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: st
             asyncio.create_task(_rerun_all_sites(org_id, org))
         else:
             db.table("incident").update({"status": "resolved", "resolved_at": now}) \
-                .eq("id", action["incident_id"]).execute()
+                .eq("id", action["incident_id"]).eq("org_id", org_id).execute()
             asyncio.create_task(_rerun_site(org_id, action["site_id"], org))
 
 
