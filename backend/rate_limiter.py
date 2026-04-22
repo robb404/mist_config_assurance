@@ -71,12 +71,29 @@ def _reset_window_if_needed(org_data: dict) -> tuple[int, str]:
 
 def increment_calls(org_id: str, n: int = CALLS_PER_SITE) -> int:
     """
-    Increment the hourly call counter for an org by n.
-    Resets the counter if the hour window has expired.
-    Returns the new call count.
+    Atomically increment the hourly call counter for an org by n.
+
+    Uses the `increment_calls_atomic` Postgres function from migration 009
+    which takes a row lock, resets the window if expired, applies the
+    increment, and returns the new count — all in one round-trip.
+
+    Falls back to a read-modify-write path if the RPC isn't available
+    (migration 009 not applied yet). Returns the new call count.
     """
     from .db import get_client
     db = get_client()
+
+    try:
+        resp = db.rpc("increment_calls_atomic", {"p_org_id": org_id, "p_n": n}).execute()
+        val = resp.data
+        if val is not None:
+            new_count = int(val[0]) if isinstance(val, list) and val else int(val)
+            log.debug("call counter (atomic) org=%s used=%d", org_id, new_count)
+            return new_count
+    except Exception as exc:  # pragma: no cover — migration not yet applied
+        log.warning("atomic increment RPC unavailable (%s) — falling back", exc)
+
+    # Legacy read-modify-write fallback — not atomic under concurrent load.
     row = db.table("org_config").select("calls_used_this_hour,calls_window_start") \
         .eq("org_id", org_id).maybe_single().execute()
     if not row.data:
@@ -87,5 +104,5 @@ def increment_calls(org_id: str, n: int = CALLS_PER_SITE) -> int:
         "calls_used_this_hour": new_count,
         "calls_window_start": window_start_iso,
     }).eq("org_id", org_id).execute()
-    log.debug("call counter org=%s used=%d", org_id, new_count)
+    log.debug("call counter (fallback) org=%s used=%d", org_id, new_count)
     return new_count

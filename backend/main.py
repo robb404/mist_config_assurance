@@ -40,6 +40,24 @@ log = logging.getLogger("mist_ca")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 debug_logs.install()
 
+# ---------------------------------------------------------------------------
+# Background task registry
+#
+# Webhook-triggered site reruns and auto-remediations are fire-and-forget via
+# asyncio.create_task(). Without tracking, if uvicorn shuts down mid-task the
+# work is silently dropped. We register every spawned task and drain the set
+# in the lifespan shutdown hook with a timeout.
+# ---------------------------------------------------------------------------
+_bg_tasks: set[asyncio.Task] = set()
+
+
+def _spawn(coro, *, name: str | None = None) -> asyncio.Task:
+    """Create a tracked background task. Replaces raw asyncio.create_task."""
+    task = asyncio.create_task(coro, name=name)
+    _bg_tasks.add(task)
+    task.add_done_callback(_bg_tasks.discard)
+    return task
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -55,7 +73,20 @@ async def lifespan(app: FastAPI):
         )
         digest.register_digest_job(org["org_id"], org.get("digest_frequency"))
     yield
+    # Graceful shutdown — let in-flight webhook reruns / remediations finish.
     sched.stop()
+    if _bg_tasks:
+        log.info("shutdown: draining %d background task(s)", len(_bg_tasks))
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*_bg_tasks, return_exceptions=True),
+                timeout=15.0,
+            )
+        except asyncio.TimeoutError:
+            log.warning("shutdown: %d background task(s) didn't finish in 15s, cancelling",
+                        len(_bg_tasks))
+            for t in _bg_tasks:
+                t.cancel()
 
 
 app = FastAPI(title="Mist Config Assurance", lifespan=lifespan)
@@ -264,7 +295,7 @@ async def mist_webhook(org_id: str, request: Request):
 
     org = _get_org_or_404(org_id)
     for site_id in site_ids:
-        asyncio.create_task(_rerun_site(org_id, site_id, org))
+        _spawn(_rerun_site(org_id, site_id, org), name=f"rerun-{site_id}")
 
     log.info("Mist webhook: org=%s triggered check for %d sites", org_id, len(site_ids))
     return {"ok": True, "sites_triggered": len(site_ids)}
@@ -407,10 +438,31 @@ async def toggle_monitored(site_id: str, monitored: bool, org_id: str = Depends(
 # ---------------------------------------------------------------------------
 
 @app.get("/api/standards")
-async def list_standards(org_id: str = Depends(get_org_id)):
+async def list_standards(
+    org_id: str = Depends(get_org_id),
+    limit: int = 500,
+    offset: int = 0,
+):
+    """
+    List standards. Paginated to keep response size bounded for orgs that
+    have accumulated many standards over time. Default limit is 500; max
+    enforced server-side at 1000.
+    """
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
     db = get_client()
-    rows = db.table("standard").select("*").eq("org_id", org_id).order("created_at").execute()
-    return {"standards": rows.data or []}
+    count_row = db.table("standard").select("id", count="exact") \
+        .eq("org_id", org_id).execute()
+    total = count_row.count or 0
+    rows = db.table("standard").select("*") \
+        .eq("org_id", org_id).order("created_at") \
+        .range(offset, offset + limit - 1).execute()
+    return {
+        "standards": rows.data or [],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @app.post("/api/standards", status_code=201)
@@ -520,10 +572,38 @@ async def get_findings(site_id: str, org_id: str = Depends(get_org_id)):
 # ---------------------------------------------------------------------------
 
 @app.get("/api/incidents")
-async def list_incidents(org_id: str = Depends(get_org_id)):
+async def list_incidents(
+    org_id: str = Depends(get_org_id),
+    limit: int = 200,
+    offset: int = 0,
+    status: str | None = None,
+):
+    """
+    List incidents, most recent first. Paginated to keep the Activity
+    page's payload bounded as incidents accumulate over time.
+
+    - `limit` default 200, max 1000.
+    - `status` optional filter: 'open', 'pending_verification', 'resolved',
+       or 'suppressed'. When omitted, returns all statuses.
+    """
+    limit = max(1, min(limit, 1000))
+    offset = max(0, offset)
     db = get_client()
-    rows = db.table("incident").select("*").eq("org_id", org_id).order("opened_at", desc=True).execute()
-    return {"incidents": rows.data or []}
+    q = db.table("incident").select("id", count="exact").eq("org_id", org_id)
+    if status:
+        q = q.eq("status", status)
+    total = (q.execute().count or 0)
+
+    q = db.table("incident").select("*").eq("org_id", org_id)
+    if status:
+        q = q.eq("status", status)
+    rows = q.order("opened_at", desc=True).range(offset, offset + limit - 1).execute()
+    return {
+        "incidents": rows.data or [],
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+    }
 
 
 @app.patch("/api/incidents/{incident_id}/suppress")

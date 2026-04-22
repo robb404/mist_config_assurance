@@ -35,7 +35,7 @@ export const api = {
   getSiteFindings: (siteId: string) =>
     request<{ findings: import('./types').Finding[] }>(`api/sites/${siteId}/findings`),
 
-  listStandards: () => request<{ standards: import('./types').Standard[] }>('api/standards'),
+  listStandards: () => request<{ standards: import('./types').Standard[]; total: number; limit: number; offset: number }>('api/standards'),
   createStandard: (body: Omit<import('./types').Standard, 'id' | 'org_id' | 'created_at'>) =>
     request<import('./types').Standard>('api/standards', { method: 'POST', body: JSON.stringify(body) }),
   updateStandard: (id: string, body: Partial<import('./types').Standard>) =>
@@ -45,7 +45,7 @@ export const api = {
   toggleStandard: (id: string, enabled: boolean) =>
     request(`api/standards/${id}/toggle?enabled=${enabled}`, { method: 'PATCH' }),
 
-  listIncidents: () => request<{ incidents: import('./types').Incident[] }>('api/incidents'),
+  listIncidents: () => request<{ incidents: import('./types').Incident[]; total: number; limit: number; offset: number }>('api/incidents'),
   suppressIncident: (id: string) =>
     request(`api/incidents/${id}/suppress`, { method: 'PATCH' }),
 
