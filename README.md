@@ -80,6 +80,7 @@ docs/                  Setup, deployment, design system docs
 |---|---|
 | [`docs/SETUP.md`](docs/SETUP.md) | Supabase, Clerk, Resend, env vars, first-run walkthrough |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Docker production deploy, reverse-proxy notes, updating |
+| [`docs/USER_GUIDE.md`](docs/USER_GUIDE.md) | Mental model, common workflows, status glossary, troubleshooting |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Component diagram, drift lifecycle, scheduler modes, security model |
 | [`docs/CUSTOMER_IMPACT.md`](docs/CUSTOMER_IMPACT.md) | Problem statement, day-one value, quantified impact, fit per vertical |
 | [`docs/EXAMPLE_OUTPUT.md`](docs/EXAMPLE_OUTPUT.md) | Annotated screens, sample CSV export, email digest, webhook timing |
