@@ -19,7 +19,11 @@ def test_get_org_id_no_org_in_payload():
         mock_client.return_value.get_signing_key_from_jwt.return_value = mock_key
         with patch("backend.auth.jwt.decode", return_value={"sub": "user_1"}):
             with pytest.raises(HTTPException) as exc:
-                asyncio.run(get_org_id("Bearer fake_token"))
+                # Pass x_org_id=None explicitly to mirror FastAPI dependency
+                # injection (no X-Org-Id header). Calling the function directly
+                # otherwise leaves x_org_id as its Header(None) sentinel, which
+                # is truthy and masks the 403.
+                asyncio.run(get_org_id("Bearer fake_token", x_org_id=None))
     assert exc.value.status_code == 403
 
 

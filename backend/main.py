@@ -99,6 +99,13 @@ app = FastAPI(title="Mist Config Assurance", lifespan=lifespan)
 # restricting CORS blocks drive-by attacks if port 8001 is ever reachable
 # from the internet.
 _app_url = os.environ.get("APP_URL", "http://localhost:3000").rstrip("/")
+if "localhost" in _app_url or _app_url.startswith("http://"):
+    log.warning(
+        "APP_URL=%r looks like a non-production value. Webhook URLs shown in the "
+        "UI and CORS will be wrong on a deployed instance. Set "
+        "APP_URL=https://<your-domain> and redeploy.",
+        _app_url,
+    )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[_app_url],
@@ -204,9 +211,13 @@ async def connect(
 async def get_org(org_id: str = Depends(get_org_id)):
     db = get_client()
     row = db.table("org_config").select("*").eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Org not configured. POST /api/org/connect first.")
     data = dict(row.data)
+    # A workspace can have an org_config row but no live Mist connection (token
+    # was nulled by disconnect, or never set). Expose that explicitly so the UI
+    # can show a "reconnect" state instead of trusting the stale org_name.
+    data["connected"] = bool(data.get("mist_token")) and bool(data.get("mist_org_id"))
     data.pop("mist_token", None)
     return data
 
@@ -252,7 +263,7 @@ async def get_org_usage(org_id: str = Depends(get_org_id)):
     row = db.table("org_config").select(
         "mode,calls_used_this_hour,calls_window_start,drift_interval_mins,webhook_secret"
     ).eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Org not configured")
 
     site_count = (
@@ -261,14 +272,17 @@ async def get_org_usage(org_id: str = Depends(get_org_id)):
     )
 
     data = row.data
+    # Apply the same lazy hourly-window reset the counter uses, so a window
+    # that has already expired displays 0 used instead of a stale count.
+    calls_used, window_start = _reset_window_if_needed(data)
     summary = budget_summary(site_count, data.get("drift_interval_mins", 0))
     app_url = os.environ.get("APP_URL", "").rstrip("/")
     webhook_url = f"{app_url}/api/webhooks/mist/{org_id}" if app_url else None
 
     return {
         "mode": data.get("mode", "polling"),
-        "calls_used_this_hour": data.get("calls_used_this_hour", 0) or 0,
-        "calls_window_start": data.get("calls_window_start"),
+        "calls_used_this_hour": calls_used,
+        "calls_window_start": window_start,
         "site_count": site_count,
         "webhook_url": webhook_url,
         "webhook_configured": bool(data.get("webhook_secret")),
@@ -293,7 +307,7 @@ async def get_digest_settings(org_id: str = Depends(get_org_id)):
     row = db.table("org_config").select(
         "digest_frequency,digest_extra_recipients,digest_last_sent_at,digest_last_error"
     ).eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Org not configured")
     return {
         "frequency": row.data.get("digest_frequency"),
@@ -334,7 +348,7 @@ async def mist_webhook(org_id: str, request: Request):
     db = get_client()
     row = db.table("org_config").select("webhook_secret,mode") \
         .eq("org_id", org_id).maybe_single().execute()
-    if not row.data or row.data.get("mode") != "webhook":
+    if not row or not row.data or row.data.get("mode") != "webhook":
         raise HTTPException(404, "Webhook not configured for this org")
 
     secret_enc = row.data.get("webhook_secret")
@@ -404,7 +418,7 @@ async def save_ai_config(req: AIConfigSave, org_id: str = Depends(get_org_id)):
 async def parse_filter_endpoint(req: ParseFilterRequest, org_id: str = Depends(get_org_id)):
     db = get_client()
     row = db.table("ai_config").select("*").eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(400, "No AI provider configured. Go to Settings → AI Provider.")
     try:
         field_dict = get_field_dict()
@@ -438,13 +452,13 @@ async def list_rftemplates(org_id: str = Depends(get_org_id)):
     row = db.table("org_config").select(
         "mist_token,cloud_endpoint,mist_org_id"
     ).eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Org not configured. POST /api/org/connect first.")
+    if not row.data.get("mist_token") or not row.data.get("mist_org_id"):
+        raise HTTPException(409, "Mist org not connected. Reconnect in Settings → Mist Connection.")
     token = decrypt(row.data["mist_token"])
     base_url = mist.build_base_url(row.data["cloud_endpoint"])
     mist_org_id = row.data["mist_org_id"]
-    if not mist_org_id:
-        raise HTTPException(400, "Mist org ID not configured. Reconnect via POST /api/org/connect.")
     templates = await mist.get_rftemplates(token, base_url, mist_org_id)
     return [{"id": t["id"], "name": t["name"]} for t in templates if "id" in t and "name" in t]
 
@@ -454,6 +468,11 @@ async def refresh_fields(_: str = Depends(get_org_id)):
     try:
         d = save_field_dict()
         return {"refreshed": len(d), "ok": True}
+    except FileNotFoundError as exc:
+        # The Mist API reference doc isn't bundled in this deployment (scrubbed
+        # for secret-scanning). fields.json is shipped and used at runtime;
+        # refresh/regeneration simply isn't available here.
+        raise HTTPException(503, str(exc))
     except PermissionError:
         raise HTTPException(500, "Cannot write fields.json — check file permissions in container")
     except Exception as exc:
@@ -473,7 +492,7 @@ async def list_sites(org_id: str = Depends(get_org_id)):
 
 @app.post("/api/sites/sync")
 async def sync_sites(org_id: str = Depends(get_org_id)):
-    org = _get_org_or_404(org_id)
+    org = _get_connected_org_or_409(org_id)
     token = decrypt(org["mist_token"])
     base_url = mist.build_base_url(org["cloud_endpoint"])
     try:
@@ -564,7 +583,7 @@ async def toggle_standard(standard_id: str, enabled: bool, org_id: str = Depends
 
 @app.post("/api/sites/{site_id}/run")
 async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_id)):
-    org = _get_org_or_404(org_id)
+    org = _get_connected_org_or_409(org_id)
     token = decrypt(org["mist_token"])
     base_url = mist.build_base_url(org["cloud_endpoint"])
 
@@ -582,7 +601,7 @@ async def run_site(site_id: str, req: RunRequest, org_id: str = Depends(get_org_
     standards = stds.data or []
 
     site_row = db.table("site").select("name").eq("id", site_id).eq("org_id", org_id).maybe_single().execute()
-    site_name = site_row.data["name"] if site_row.data else site_id
+    site_name = site_row.data["name"] if (site_row and site_row.data) else site_id
 
     findings = evaluate_site(site_id, site_name, wlans, site_setting, standards)
 
@@ -693,7 +712,7 @@ async def approve_action(action_id: str, org_id: str = Depends(get_org_id)):
     db = get_client()
     row = db.table("remediation_action").select("*").eq("id", action_id).eq("org_id", org_id) \
             .maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Action not found")
     action = row.data
     org = _get_org_or_404(org_id)
@@ -729,7 +748,7 @@ async def reject_action(action_id: str, org_id: str = Depends(get_org_id)):
 @app.get("/api/sites/{site_id}/wlans/raw")
 async def get_raw_wlans(site_id: str, org_id: str = Depends(get_org_id)):
     """Return raw derived WLAN objects from Mist — for inspecting field names when writing standards."""
-    org = _get_org_or_404(org_id)
+    org = _get_connected_org_or_409(org_id)
     token = decrypt(org["mist_token"])
     base_url = mist.build_base_url(org["cloud_endpoint"])
     wlans = await mist.get_site_wlans(token, base_url, site_id)
@@ -775,9 +794,22 @@ async def debug_log_entries(
 def _get_org_or_404(org_id: str) -> dict:
     db = get_client()
     row = db.table("org_config").select("*").eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         raise HTTPException(404, "Org not configured")
     return row.data
+
+
+def _get_connected_org_or_409(org_id: str) -> dict:
+    """Like _get_org_or_404, but require a live Mist connection. Endpoints that
+    immediately decrypt the token use this so a disconnected workspace gets a
+    clean 409 instead of crashing on decrypt(None)."""
+    org = _get_org_or_404(org_id)
+    if not org.get("mist_token") or not org.get("mist_org_id"):
+        raise HTTPException(
+            409,
+            "Mist org not connected. Reconnect in Settings → Mist Connection.",
+        )
+    return org
 
 
 def _first_or_500(result, what: str) -> dict:
@@ -921,12 +953,20 @@ async def _sync_incidents(
 async def _execute_remediation_action(action: dict, org_id: str, mist_org_id: str | None = None):
     db = get_client()
     org = _get_org_or_404(org_id)
+    if not org.get("mist_token"):
+        db.table("remediation_action").update({
+            "status": "failed",
+            "error_detail": "Mist org not connected",
+            "attempted_at": datetime.now(timezone.utc).isoformat(),
+        }).eq("id", action["id"]).execute()
+        log.warning("remediation skipped — org=%s has no Mist connection", org_id)
+        return
     token = decrypt(org["mist_token"])
     base_url = mist.build_base_url(org["cloud_endpoint"])
     effective_mist_org_id = mist_org_id or org.get("mist_org_id")
 
     std = db.table("standard").select("*").eq("id", action["standard_id"]).maybe_single().execute()
-    if not std.data:
+    if not std or not std.data:
         return
 
     result = await apply_remediation(
@@ -1020,6 +1060,10 @@ async def run_drift_for_org(org_id: str):
         sched.remove_org_job(org_id)
         return
 
+    if not org.get("mist_token") or not org.get("mist_org_id"):
+        log.info("Drift check skipped — org=%s has no Mist connection", org_id)
+        return
+
     db = get_client()
     sites = db.table("site").select("*").eq("org_id", org_id).eq("monitored", True).execute()
     site_list = sites.data or []
@@ -1037,7 +1081,7 @@ async def run_drift_for_org(org_id: str):
         # Rate limit: skip this site if check budget is exhausted
         org_fresh = db.table("org_config").select("calls_used_this_hour,calls_window_start") \
             .eq("org_id", org_id).maybe_single().execute()
-        if not org_fresh.data:
+        if not org_fresh or not org_fresh.data:
             log.warning("Rate budget check failed (org row missing): skipping site=%s", site["id"])
             continue
         calls_used, _ = _reset_window_if_needed(org_fresh.data)

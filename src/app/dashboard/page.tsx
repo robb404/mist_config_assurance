@@ -25,7 +25,14 @@ export default function DashboardPage() {
 
   async function load() {
     try {
-      await api.getOrg()
+      const org = await api.getOrg()
+      // A row can exist while disconnected (token nulled). Treat not-connected
+      // the same as no org so the setup/reconnect CTA shows instead of sites
+      // that would only error on Check.
+      if (!org.connected) {
+        setOrgConnected(false)
+        return
+      }
       setOrgConnected(true)
     } catch {
       setOrgConnected(false)

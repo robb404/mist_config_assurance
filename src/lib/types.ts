@@ -5,6 +5,9 @@ export interface OrgConfig {
   drift_interval_mins: number
   auto_remediate: boolean
   mode: 'polling' | 'webhook'
+  /** True only when a Mist token + org id are actually stored. A row can exist
+   *  while disconnected (token nulled), in which case this is false. */
+  connected: boolean
 }
 
 export interface OrgUsage {

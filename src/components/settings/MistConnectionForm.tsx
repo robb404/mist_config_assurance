@@ -84,11 +84,15 @@ export function MistConnectionForm() {
     }
   }
 
-  const adornment = org
+  const adornment = org && org.connected
     ? <span className="text-xs text-healthy font-medium normal-case tracking-normal">✓ {org.org_name}</span>
-    : null
+    : org && !org.connected
+      ? <span className="text-xs text-on-surface/60 font-medium normal-case tracking-normal">Not connected</span>
+      : null
 
-  const showForm = !org || editing
+  // A disconnected org (row exists, token nulled) shows the form so the user
+  // can reconnect — never the "connected" summary with a stale ✓.
+  const showForm = !org || !org.connected || editing
 
   return (
     <CollapsibleSection title="Mist Connection" adornment={adornment}>
@@ -137,6 +141,11 @@ export function MistConnectionForm() {
 
       {showForm && (
         <form onSubmit={connect} className="space-y-4">
+          {org && !org.connected && !editing && (
+            <p className="text-sm text-on-surface/70">
+              Previously connected to <span className="font-medium">{org.org_name}</span>, now disconnected. Reconnect to resume monitoring.
+            </p>
+          )}
           <div>
             <label className={labelCls}>Cloud Endpoint</label>
             <select value={endpoint} onChange={e => setEndpoint(e.target.value)} className={inputCls}>

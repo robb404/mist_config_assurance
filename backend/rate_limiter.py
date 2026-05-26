@@ -96,7 +96,7 @@ def increment_calls(org_id: str, n: int = CALLS_PER_SITE) -> int:
     # Legacy read-modify-write fallback — not atomic under concurrent load.
     row = db.table("org_config").select("calls_used_this_hour,calls_window_start") \
         .eq("org_id", org_id).maybe_single().execute()
-    if not row.data:
+    if not row or not row.data:
         return 0
     calls_used, window_start_iso = _reset_window_if_needed(row.data)
     new_count = calls_used + n

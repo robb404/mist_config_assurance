@@ -23,6 +23,12 @@ def _parse_values(raw: str) -> list[str]:
 
 
 def build_field_dict() -> dict:
+    if not _FIELD_REF.exists():
+        raise FileNotFoundError(
+            f"Field reference doc not bundled ({_FIELD_REF.name}). The committed "
+            "fields.json is the shipped source of truth; regeneration requires "
+            "the Mist API reference doc, which is not included in this deployment."
+        )
     text = _FIELD_REF.read_text()
     result: dict = {}
     current_scope = "wlan"
